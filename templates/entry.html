@@ -1,0 +1,78 @@
+{% extends "layout.html" %}
+{% block title %}Timesheet · {{ month_label }}{% endblock %}
+{% block content %}
+<div class="row-between">
+  <h1>{{ month_label }}</h1>
+  <div class="month-nav">
+    <a class="btn" href="{{ url_for('entry', month=prev_month) }}">← Prev</a>
+    <a class="btn" href="{{ url_for('entry') }}">Today</a>
+    <a class="btn" href="{{ url_for('entry', month=next_month) }}">Next →</a>
+  </div>
+</div>
+
+<div class="card">
+  <table class="calendar">
+    <thead>
+      <tr>
+        <th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for week in weeks %}
+        <tr>
+          {% for cell in week %}
+            {% if cell.state == 'out' %}
+              <td class="cal-cell"><span class="cal-link out"><span class="cal-num">{{ cell.day }}</span></span></td>
+            {% else %}
+              <td class="cal-cell">
+                <a class="cal-link" href="{{ url_for('day', date=cell.date) }}" title="{{ cell.date }}">
+                  <span class="cal-num state-{{ cell.state }}">{{ cell.day }}</span>
+                </a>
+              </td>
+            {% endif %}
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="legend">
+    <span><i class="lg state-none"></i>No hours</span>
+    <span><i class="lg state-partial"></i>Partial (&lt;{{ HOURS_PER_DAY }}h)</span>
+    <span><i class="lg state-complete"></i>Complete (≥{{ HOURS_PER_DAY }}h)</span>
+    <span><i class="lg state-holiday"></i>Holiday</span>
+    <span><i class="lg state-leave"></i>Leave</span>
+  </div>
+</div>
+
+<div class="recent-head">
+  <h2>Logged days</h2>
+  <div class="mini-completion" title="{{ month_progress.working_days }} working days{% if month_progress.offdays %}, {{ month_progress.offdays }} off-day(s) excluded{% endif %}">
+    <span class="completion-label">{{ month_label.split(' ')[0] }} Completion</span>
+    <div class="bar bar-sm">
+      <div class="bar-fill {{ 'over' if month_progress.pct > 100 }}" style="width: {{ month_progress.pct_bar }}%"></div>
+    </div>
+    <span class="muted small">{{ '%.0f'|format(month_progress.pct) }}% · {{ month_progress.achieved }}/{{ month_progress.target }}h</span>
+  </div>
+</div>
+<div class="card">
+  <table class="grid">
+    <thead>
+      <tr><th>Date</th><th>Status</th><th>Type</th><th class="num">Hours</th><th class="actions-col"></th></tr>
+    </thead>
+    <tbody>
+      {% for d in recent_days %}
+        <tr>
+          <td>{{ d.work_date }}</td>
+          <td><span class="pill pill-{{ d.status }}">{{ d.status }}</span></td>
+          <td>{{ DAY_TYPE_LABELS[d.day_type] }}</td>
+          <td class="num">{{ '%.2f'|format(d.hours) }}</td>
+          <td class="actions-col"><a class="btn btn-sm" href="{{ url_for('day', date=d.work_date) }}">Open</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">No entries logged this month.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

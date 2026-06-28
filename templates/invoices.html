@@ -1,0 +1,78 @@
+{% extends "layout.html" %}
+{% block title %}Invoices{% endblock %}
+{% block content %}
+<div class="row-between">
+  <h1>Invoices</h1>
+  <div class="row-gap">
+    <a class="btn" href="{{ url_for('settings', tab='invoice') }}">{{ ico('settings') }} Settings</a>
+    <a class="btn btn-primary" href="{{ url_for('invoice_new') }}">{{ ico('plus') }} New invoice</a>
+  </div>
+</div>
+
+<div class="totals-cards">
+  <div class="card mini">
+    <div class="mini-label">Total billed (USD)</div>
+    <div class="mini-value">${{ usd_total|money }}</div>
+  </div>
+  <div class="card mini">
+    <div class="mini-label">Total billed (INR)</div>
+    <div class="mini-value">₹{{ inr_total|money }}</div>
+    <div class="muted small">Includes USD invoices' INR conversions (at each saved rate); those USD invoices also count under USD above.</div>
+  </div>
+</div>
+
+<div class="card">
+  <form method="get" class="inline-form" id="inv-filter" data-filter>
+    <div>
+      <label>Year</label>
+      <select name="year">
+        {% for y in years %}<option value="{{ y }}" {{ 'selected' if y == sel_year }}>{{ y }}</option>{% endfor %}
+      </select>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <table class="grid">
+    <thead>
+      <tr><th>Number</th><th>Date</th><th class="num">Amount</th><th>INR conversion</th><th>Status</th><th>Settled</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for x in invoices %}
+        {% set inv = x.row %}{% set d = x.disp %}
+        <tr>
+          <td><strong>{{ inv.number }}</strong></td>
+          <td>{{ inv.invoice_date }}</td>
+          <td class="num">{{ d.symbol }}{{ inv.total|money }} {{ inv.currency }}</td>
+          <td>
+            {% if d.show_inr %}
+              ₹{{ d.inr_total|money }}
+              <span class="muted small">@ {{ '%.2f'|format(d.inr_rate) }}{% if d.inr_rate_date %} on {{ d.inr_rate_date }}{% endif %}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td><span class="pill pill-{{ inv.status }}">{{ inv.status }}</span></td>
+          <td>{{ inv.settled_on or '—' }}</td>
+          <td class="nowrap">
+            <a class="btn btn-sm btn-icon btn-primary" href="{{ url_for('invoice_view', iid=inv.id) }}" title="View">{{ ico('view') }}</a>
+            <a class="btn btn-sm btn-icon" href="{{ url_for('invoice_pdf', iid=inv.id) }}" target="_blank" title="Download PDF">{{ ico('file') }}</a>
+            <form method="post" action="{{ url_for('invoice_email', iid=inv.id) }}" class="inline inplace" onsubmit="return confirm('Email invoice {{ inv.number }} to the configured recipients?')">
+              <button class="btn btn-sm btn-icon" type="submit" title="Email invoice">{{ ico('email') }}</button>
+            </form>
+            {% if inv.status != 'paid' %}
+              <a class="btn btn-sm btn-icon" href="{{ url_for('invoice_edit', iid=inv.id) }}" title="Edit">{{ ico('edit') }}</a>
+              <form method="post" action="{{ url_for('invoice_paid', iid=inv.id) }}" class="inline inplace">
+                <button class="btn btn-sm btn-icon btn-success" type="submit" title="Mark paid">{{ ico('check') }}</button>
+              </form>
+            {% endif %}
+            <form method="post" action="{{ url_for('invoice_delete', iid=inv.id) }}" class="inline inplace" onsubmit="return confirm('Delete invoice {{ inv.number }}?')">
+              <button class="btn btn-sm btn-icon btn-trash" type="submit" title="Delete">{{ ico('delete') }}</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="7" class="muted">No invoices yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,203 @@
+{% extends "layout.html" %}
+{% block title %}Expenses{% endblock %}
+{% block content %}
+<div class="row-between">
+  <h1>Expenses</h1>
+  <a class="btn btn-primary" href="{{ url_for('expense_new') }}">+ New expense</a>
+</div>
+
+<div class="card">
+  <form method="get" class="inline-form" id="exp-filter" data-filter>
+    <div>
+      <label>Year</label>
+      <select name="year">
+        {% for y in years %}<option value="{{ y }}" {{ 'selected' if y == sel_year }}>{{ y }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>Purpose</label>
+      <select name="purpose">
+        <option value="">All</option>
+        {% for p in purposes %}<option value="{{ p }}" {{ 'selected' if p == sel_purpose }}>{{ p }}</option>{% endfor %}
+      </select>
+    </div>
+  </form>
+</div>
+
+<h2>Totals</h2>
+<div class="card">
+  <table class="grid no-sort totals-table">
+    <thead>
+      <tr><th>Purpose</th>{% for c in currencies %}<th class="num">{{ CURRENCY_SYMBOLS[c] }} {{ c }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+      {% for p in purposes %}
+        <tr class="purpose-row" title="Click to see the category breakdown">
+          <td><span class="caret"></span> {{ p }}</td>
+          {% for c in currencies %}
+            <td class="num">{{ CURRENCY_SYMBOLS[c] }}{{ totals[p][c]|money }}</td>
+          {% endfor %}
+        </tr>
+        <tr class="purpose-detail" hidden>
+          <td colspan="{{ currencies|length + 1 }}">
+            <table class="grid no-sort sub-grid">
+              <tbody>
+                {% for name, amts in cat_by_purpose[p] %}
+                  <tr>
+                    <td>{{ name }}</td>
+                    {% for c in currencies %}<td class="num">{{ CURRENCY_SYMBOLS[c] }}{{ amts[c]|money }}</td>{% endfor %}
+                  </tr>
+                {% else %}
+                  <tr><td colspan="{{ currencies|length + 1 }}" class="muted">No {{ p }} expenses.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+      {% endfor %}
+      <tr class="total-row">
+        <td><strong>Grand total</strong></td>
+        {% for c in currencies %}
+          <td class="num"><strong>{{ CURRENCY_SYMBOLS[c] }}{{ grand[c]|money }}</strong></td>
+        {% endfor %}
+      </tr>
+    </tbody>
+  </table>
+  <p class="muted small">Currencies are summed separately and never mixed. Click a purpose to expand its category breakdown.</p>
+</div>
+
+<h2>Items</h2>
+<div class="card">
+  <table class="grid">
+    <thead>
+      <tr><th>Date</th><th>Item</th><th class="num">Price</th><th>Purpose</th><th>Category</th><th>Bought at</th><th>Warranty / Renewal</th><th>Files</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for e in items %}
+        <tr class="{{ e.row_class }}">
+          <td>{{ e.row.date_purchased }}</td>
+          <td>
+            {{ e.row.item }}
+            {% if e.row.is_subscription %}<span class="tag tag-sub">{{ e.row.subscription_period }} subscription</span>{% endif %}
+            {% if e.row.rolled_from_id %}<span class="muted small inline-ico" title="Continued from the previous year">{{ ico('refresh') }} continued</span>{% endif %}
+          </td>
+          <td class="num">{{ CURRENCY_SYMBOLS[e.row.currency] }}{{ e.row.price|money }}</td>
+          <td>{{ e.row.purpose }}</td>
+          <td>{{ e.row.category or '—' }}</td>
+          <td>{{ e.row.purchased_at }}</td>
+          <td>
+            {% if e.row.is_subscription %}
+              {{ e.row.subscription_end or '—' }}
+              {% if e.sub_state == 'expired' %}<span class="tag tag-danger">lapsed</span>
+              {% elif e.sub_state == 'warn' %}<span class="tag tag-info">renewing</span>{% endif %}
+            {% else %}
+              {{ e.row.warranty_till or '—' }}
+              {% if e.warranty_state == 'expired' %}<span class="tag tag-danger">expired</span>
+              {% elif e.warranty_state == 'warn' %}<span class="tag tag-warn">expiring</span>{% endif %}
+            {% endif %}
+          </td>
+          <td>
+            {% for a in e.atts %}
+              <a class="att-link" href="{{ url_for('expense_attachment', att_id=a.id) }}" target="_blank" title="{{ a.original_name }}">📎</a>
+            {% endfor %}
+          </td>
+          <td class="nowrap">
+            {% if e.row.is_subscription %}
+              <button type="button" class="btn btn-sm end-sub-btn"
+                      data-action="{{ url_for('expense_end_subscription', eid=e.row.id) }}"
+                      data-item="{{ e.row.item }}" title="Mark this subscription ended">End</button>
+            {% endif %}
+            <a class="btn btn-sm btn-icon" href="{{ url_for('expense_edit', eid=e.row.id) }}" title="Edit">{{ ico('edit') }}</a>
+            <form method="post" action="{{ url_for('expense_delete', eid=e.row.id) }}" class="inline inplace" onsubmit="return confirm('Delete this expense?')">
+              <button class="btn btn-sm btn-icon btn-trash" type="submit" title="Delete">{{ ico('delete') }}</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9" class="muted">No expenses.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2>Subscription history</h2>
+<div class="card">
+  <p class="muted small">Past billing cycles — completed cycles rolled to the next automatically; closed ones were ended manually. Each still counts in the totals above.</p>
+  <table class="grid">
+    <thead>
+      <tr><th>Item</th><th class="num">Amount</th><th>Purpose</th><th>Plan</th><th>Cycle</th><th>Status</th><th>Files</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for e in past_cycles %}
+        <tr class="ended-row">
+          <td>{{ e.row.item }}</td>
+          <td class="num">{{ CURRENCY_SYMBOLS[e.row.currency] }}{{ e.row.price|money }}</td>
+          <td>{{ e.row.purpose }}</td>
+          <td>{{ e.row.subscription_period }}</td>
+          <td>{{ e.row.date_purchased }} → {{ e.row.subscription_end }}</td>
+          <td>
+            {% if e.row.subscription_status == 'closed' %}
+              <span class="tag">closed</span>{% if e.row.subscription_ended_on %} <span class="muted small">{{ e.row.subscription_ended_on }}</span>{% endif %}
+            {% else %}
+              <span class="tag tag-info">completed</span>
+            {% endif %}
+          </td>
+          <td>
+            {% for a in e.atts %}
+              <a class="att-link" href="{{ url_for('expense_attachment', att_id=a.id) }}" target="_blank" title="{{ a.original_name }}">📎</a>
+            {% endfor %}
+          </td>
+          <td class="nowrap">
+            <a class="btn btn-sm btn-icon" href="{{ url_for('expense_edit', eid=e.row.id) }}" title="Edit">{{ ico('edit') }}</a>
+            <form method="post" action="{{ url_for('expense_delete', eid=e.row.id) }}" class="inline inplace" onsubmit="return confirm('Delete this cycle?')">
+              <button class="btn btn-sm btn-icon btn-trash" type="submit" title="Delete">{{ ico('delete') }}</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="muted">No past subscription cycles.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ---- End-subscription date prompt ---- #}
+<div class="modal-backdrop" id="end-modal" data-today="{{ today }}" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="end-title">
+    <h3 id="end-title">End subscription</h3>
+    <p class="muted" id="end-item"></p>
+    <form method="post" id="end-form" class="inplace">
+      <label for="end-date">End date</label>
+      <input type="date" id="end-date" name="ended_on" required>
+      <div class="row-gap">
+        <button class="btn btn-primary" type="submit">End subscription</button>
+        <button class="btn" type="button" id="end-cancel">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    var modal = document.getElementById("end-modal");
+    if (!modal) return;
+    var form  = document.getElementById("end-form");
+    var dateIn = document.getElementById("end-date");
+    var itemP = document.getElementById("end-item");
+    var today = modal.dataset.today;
+
+    document.querySelectorAll(".end-sub-btn").forEach(function (b) {
+      b.addEventListener("click", function () {
+        form.action = b.dataset.action;
+        itemP.textContent = "Ending “" + b.dataset.item + "”. Pick the date it ended:";
+        dateIn.value = today;
+        modal.hidden = false;
+      });
+    });
+    document.getElementById("end-cancel").addEventListener("click", function () { modal.hidden = true; });
+    modal.addEventListener("click", function (e) { if (e.target === modal) modal.hidden = true; });
+  })();
+</script>
+{% endblock %}

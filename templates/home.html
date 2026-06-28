@@ -1,0 +1,37 @@
+{% extends "layout.html" %}
+{% block title %}Home · Timesheet{% endblock %}
+{% block content %}
+<h1>Monthly Progress</h1>
+
+<div class="progress-grid">
+  {% for m in progress %}
+    <div class="card progress-card">
+      <div class="progress-head">
+        <span class="progress-label">{{ m.label }}</span>
+        <span class="tag tag-{{ m.tag|lower|replace(' ', '-') }}">{{ m.tag }}</span>
+      </div>
+      <div class="bar">
+        <div class="bar-fill {{ 'over' if m.pct > 100 }}" style="width: {{ m.pct_bar }}%"></div>
+      </div>
+      <div class="progress-meta">
+        <strong>{{ m.achieved }}</strong> / {{ m.target }} h
+        <span class="pct">({{ '%.0f'|format(m.pct) }}%)</span>
+      </div>
+      <div class="muted small">
+        {{ m.working_days }} working days
+        {% if m.offdays %}· {{ m.offdays }} off-day{{ 's' if m.offdays != 1 }} excluded{% endif %}
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+<h2>Actions</h2>
+<div class="action-grid">
+  <a class="action" href="{{ url_for('entry') }}">{{ ico('calendar', 'action-ico') }}TimeSheet</a>
+  <a class="action" href="{{ url_for('tasks') }}">{{ ico('tasks', 'action-ico') }}Maintain Tasks</a>
+  <a class="action" href="{{ url_for('report') }}">{{ ico('report', 'action-ico') }}Report</a>
+  <a class="action" href="{{ url_for('expenses') }}">{{ ico('expenses', 'action-ico') }}Expenses</a>
+  <a class="action" href="{{ url_for('invoices') }}">{{ ico('file', 'action-ico') }}Invoice</a>
+  <a class="action" href="{{ url_for('settings') }}">{{ ico('settings', 'action-ico') }}Settings</a>
+</div>
+{% endblock %}

@@ -1,0 +1,114 @@
+{% extends "layout.html" %}
+{% block title %}Invoice {{ inv.number }}{% endblock %}
+{% block content %}
+<div class="row-between no-print iv-toolbar">
+  <h1>Invoice {{ inv.number }}</h1>
+  <div class="iv-actions">
+    {% if inv.status != 'paid' %}
+      <a class="btn btn-icon" href="{{ url_for('invoice_edit', iid=inv.id) }}" title="Edit">{{ ico('edit') }}</a>
+    {% endif %}
+    <a class="btn btn-icon" href="{{ url_for('invoice_pdf', iid=inv.id) }}" target="_blank" title="Download PDF">{{ ico('file') }}</a>
+    <button class="btn btn-icon btn-primary" type="button" onclick="window.print()" title="Print">{{ ico('print') }}</button>
+  </div>
+</div>
+
+{% set cur = inv.currency %}
+<div class="card invoice-doc">
+  {% if inv.status == 'paid' %}
+    <div class="iv-watermark" aria-hidden="true"><span>PAID</span></div>
+  {% endif %}
+  <div class="iv-content">
+  <div class="iv-head">
+    <div>
+      <div class="iv-biz">{{ profile.biz_name or 'Your Business' }}</div>
+      {% if profile.biz_address %}<div class="muted small">{{ profile.biz_address|replace('\n', '<br>')|safe }}</div>{% endif %}
+      {% if profile.biz_email %}<div class="muted small">{{ profile.biz_email }}</div>{% endif %}
+      {% if profile.biz_gstin %}<div class="muted small">GSTIN: {{ profile.biz_gstin }}</div>{% endif %}
+    </div>
+    <div class="iv-meta">
+      <div class="iv-title">INVOICE</div>
+      <div>Number: <strong>{{ inv.number }}</strong></div>
+      <div>Date: {{ inv.invoice_date }}</div>
+      {% if inv.period_start and inv.period_end %}<div>Period: {{ inv.period_start }} to {{ inv.period_end }}</div>{% endif %}
+      <div>Status:
+        <span class="pill pill-{{ inv.status }}">{{ inv.status }}</span>
+        {% if inv.status == 'paid' and inv.settled_on %}<span class="muted small">{{ inv.settled_on }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="iv-billto">
+    <div class="pv-sub">BILL TO</div>
+    <div><strong>{{ inv.client_name }}</strong></div>
+    {% if inv.client_address %}<div>{{ inv.client_address|replace('\n', '<br>')|safe }}</div>{% endif %}
+    {% if inv.client_gstin %}<div class="muted small">GSTIN: {{ inv.client_gstin }}</div>{% endif %}
+  </div>
+
+  <table class="iv-table">
+    <thead>
+      <tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">Rate ({{ cur }})</th><th class="num">Amount ({{ cur }})</th></tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ it.description }}</td>
+          <td class="num">{{ '%.2f'|format(it.qty or 0) }}</td>
+          <td class="num">{{ it.rate|money }}</td>
+          <td class="num">{{ ('-' if it.is_discount else '') }}{{ (it.amount or 0)|abs|money }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="iv-totals">
+    <div class="iv-tot-row"><span>Subtotal</span><span>{{ inv.subtotal|money }} {{ cur }}</span></div>
+    {% if disp.show_inr %}
+      <div class="iv-tot-row total"><span>TOTAL</span><span>{{ inv.subtotal|money }} {{ cur }}</span></div>
+      <div class="iv-tot-row"><span>Exchange rate{% if disp.inr_rate_date %} (as on {{ disp.inr_rate_date }}){% endif %}</span><span>1 USD = {{ '%.2f'|format(disp.inr_rate) }} INR</span></div>
+      <div class="iv-tot-row"><span>Subtotal (INR)</span><span>{{ disp.inr_subtotal|money }} INR</span></div>
+      {% if disp.use_igst %}
+        {% if disp.igst_rate %}
+          <div class="iv-tot-row"><span>GST ({{ '%.2f'|format(disp.igst_rate) }}%)</span><span>{{ disp.gst_amount|money }} INR</span></div>
+        {% endif %}
+      {% else %}
+        {% if disp.cgst_rate %}
+          <div class="iv-tot-row"><span>CGST ({{ '%.2f'|format(disp.cgst_rate) }}%)</span><span>{{ disp.cgst_amount|money }} INR</span></div>
+        {% endif %}
+        {% if disp.sgst_rate %}
+          <div class="iv-tot-row"><span>SGST ({{ '%.2f'|format(disp.sgst_rate) }}%)</span><span>{{ disp.sgst_amount|money }} INR</span></div>
+        {% endif %}
+      {% endif %}
+      <div class="iv-tot-row total"><span>TOTAL (INR)</span><span>{{ '%.0f'|format(disp.inr_total) }} INR</span></div>
+    {% else %}
+      {% if disp.use_igst %}
+        {% if disp.igst_rate %}
+          <div class="iv-tot-row"><span>GST ({{ '%.2f'|format(disp.igst_rate) }}%)</span><span>{{ disp.gst_amount|money }} {{ cur }}</span></div>
+        {% endif %}
+      {% else %}
+        {% if disp.cgst_rate %}
+          <div class="iv-tot-row"><span>CGST ({{ '%.2f'|format(disp.cgst_rate) }}%)</span><span>{{ disp.cgst_amount|money }} {{ cur }}</span></div>
+        {% endif %}
+        {% if disp.sgst_rate %}
+          <div class="iv-tot-row"><span>SGST ({{ '%.2f'|format(disp.sgst_rate) }}%)</span><span>{{ disp.sgst_amount|money }} {{ cur }}</span></div>
+        {% endif %}
+      {% endif %}
+      {% if disp.show_round_off %}
+        <div class="iv-tot-row"><span>Round off</span><span>{{ disp.round_off|money }} {{ cur }}</span></div>
+        <div class="iv-tot-row total"><span>TOTAL</span><span>{{ '%.0f'|format(disp.rounded_total) }} {{ cur }}</span></div>
+      {% else %}
+        <div class="iv-tot-row total"><span>TOTAL</span><span>{{ inv.total|money }} {{ cur }}</span></div>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {% if cur == 'INR' and inv.fx_rate and inv.fx_rate != 1 %}
+    <p class="muted small">Amounts converted at USD→INR rate of {{ '%.2f'|format(inv.fx_rate) }}</p>
+  {% endif %}
+
+  {% if inv.notes %}<div class="iv-foot"><strong>Notes</strong><br>{{ inv.notes|replace('\n', '<br>')|safe }}</div>{% endif %}
+  {% if profile.bank_details %}<div class="iv-foot"><strong>Payment details</strong><br>{{ profile.bank_details|replace('\n', '<br>')|safe }}</div>{% endif %}
+  {% if profile.terms %}<div class="iv-foot"><strong>Terms</strong><br>{{ profile.terms|replace('\n', '<br>')|safe }}</div>{% endif %}
+  </div>
+</div>
+{% endblock %}

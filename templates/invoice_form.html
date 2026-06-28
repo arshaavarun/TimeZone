@@ -1,0 +1,406 @@
+{% extends "layout.html" %}
+{% block title %}{{ 'New' if is_new else 'Edit' }} invoice{% endblock %}
+{% block content %}
+<div class="row-between">
+  <h1>{{ 'New' if is_new else 'Edit' }} invoice</h1>
+  <a class="btn" href="{{ url_for('invoices') }}">← Back</a>
+</div>
+
+<div class="invoice-layout">
+  <!-- ============ LEFT: builder ============ -->
+  <div class="card builder">
+    <form method="post" action="{{ url_for('invoice_save') }}" id="inv-form">
+      <input type="hidden" name="id" value="{{ invoice.id }}">
+
+      <div class="form-grid">
+        <div>
+          <label>Number</label>
+          <input type="text" name="number" id="f-number" value="{{ invoice.number }}">
+        </div>
+        <div>
+          <label>Invoice date</label>
+          <input type="date" name="invoice_date" id="f-date" value="{{ invoice.invoice_date }}">
+        </div>
+        <div>
+          <label>Currency</label>
+          <select name="currency" id="f-currency">
+            {% for c in currencies %}
+              <option value="{{ c }}" {{ 'selected' if c == invoice.currency }}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div id="fx-wrap" style="{{ '' if invoice.currency == 'INR' else 'display:none' }}">
+          <label>USD→INR rate (for INR invoice)</label>
+          <input type="number" name="fx_rate" id="f-fx" step="0.01" value="{{ invoice.fx_rate }}">
+        </div>
+      </div>
+
+      <fieldset class="period-box">
+        <legend>Period</legend>
+        <div class="form-grid">
+          <div>
+            <label>Start</label>
+            <input type="date" name="period_start" id="f-pstart" value="{{ invoice.period_start }}">
+          </div>
+          <div>
+            <label>End</label>
+            <input type="date" name="period_end" id="f-pend" value="{{ invoice.period_end }}">
+          </div>
+        </div>
+        <button type="button" class="btn" id="btn-pull">⤓ Pull hours from timesheet</button>
+      </fieldset>
+
+      <fieldset>
+        <legend>Bill to</legend>
+        <div>
+          <label>Client name</label>
+          <input type="text" name="client_name" value="{{ invoice.client_name }}">
+        </div>
+        <div>
+          <label>Client address</label>
+          <textarea name="client_address" rows="2">{{ invoice.client_address }}</textarea>
+        </div>
+        <div>
+          <label>Client GSTIN</label>
+          <input type="text" name="client_gstin" value="{{ invoice.client_gstin }}">
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Line items</legend>
+        <table class="grid items-table no-sort">
+          <thead>
+            <tr><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th><th>Disc?</th><th></th></tr>
+          </thead>
+          <tbody id="items-body">
+            <!-- rows injected by JS -->
+          </tbody>
+        </table>
+        <div class="row-gap">
+          <button type="button" class="btn" id="btn-add-line">+ Add line</button>
+          <span class="muted small">Tick “Disc?” on a line to make it a discount.</span>
+        </div>
+      </fieldset>
+
+      <fieldset class="gst-block">
+        <legend>Tax (GST)</legend>
+        <label class="check">
+          <input type="checkbox" class="use-igst-cb" name="use_igst" id="f-use-igst" value="1" {{ 'checked' if invoice.use_igst }}>
+          iGST (single GST rate)
+        </label>
+        <div class="gst-igst">
+          <label>GST %</label>
+          <input type="number" name="igst_rate" id="f-igst" step="0.01" value="{{ invoice.igst_rate }}">
+        </div>
+        <div class="form-grid gst-split">
+          <div>
+            <label>CGST %</label>
+            <input type="number" name="cgst_rate" id="f-cgst" step="0.01" value="{{ invoice.cgst_rate }}">
+          </div>
+          <div>
+            <label>SGST %</label>
+            <input type="number" name="sgst_rate" id="f-sgst" step="0.01" value="{{ invoice.sgst_rate }}">
+          </div>
+        </div>
+        <p class="muted small">GST applies to INR amounts only (INR invoices, or USD invoices with INR conversion on).</p>
+      </fieldset>
+
+      <fieldset id="inr-box" style="{{ '' if invoice.currency == 'USD' else 'display:none' }}">
+        <legend>INR conversion (USD invoices)</legend>
+        <label class="check">
+          <input type="checkbox" name="show_inr" id="f-showinr" value="1" {{ 'checked' if invoice.show_inr }}>
+          Show INR conversion
+        </label>
+        <div class="form-grid">
+          <div>
+            <label>USD→INR rate</label>
+            <input type="number" name="inr_rate" id="f-inrrate" step="0.01" value="{{ invoice.inr_rate }}">
+          </div>
+          <div>
+            <label>Rate date</label>
+            <input type="date" name="inr_rate_date" id="f-inrdate" value="{{ invoice.inr_rate_date }}">
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Notes</legend>
+        <textarea name="notes" id="f-notes" rows="2">{{ invoice.notes }}</textarea>
+      </fieldset>
+
+      <div class="row-gap">
+        <button class="btn btn-primary" type="submit">Save invoice</button>
+        {% if not is_new %}
+          <a class="btn" href="{{ url_for('invoice_pdf', iid=invoice.id) }}" target="_blank">Download PDF</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- ============ RIGHT: live preview ============ -->
+  <div class="card preview" id="preview">
+    <div class="pv-head">
+      <div>
+        <div class="pv-biz">{{ profile.biz_name or 'Your Business' }}</div>
+        <div class="muted small">{{ (profile.biz_address or '')|replace('\n', '<br>')|safe }}</div>
+        {% if profile.biz_email %}<div class="muted small">{{ profile.biz_email }}</div>{% endif %}
+        {% if profile.biz_gstin %}<div class="muted small">GSTIN: {{ profile.biz_gstin }}</div>{% endif %}
+      </div>
+      <div class="pv-meta">
+        <div class="pv-title">INVOICE</div>
+        <div id="pv-number"></div>
+        <div id="pv-date"></div>
+        <div id="pv-period"></div>
+      </div>
+    </div>
+
+    <div class="pv-billto">
+      <div class="pv-sub">BILL TO</div>
+      <div id="pv-client"></div>
+    </div>
+
+    <table class="pv-table">
+      <thead>
+        <tr><th>#</th><th>Description</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr>
+      </thead>
+      <tbody id="pv-items"></tbody>
+    </table>
+
+    <div class="pv-totals" id="pv-totals"></div>
+    <div class="pv-notes" id="pv-notes"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var CUR_SYMBOLS = {USD: "$", INR: "₹"};
+  var INITIAL_ITEMS = {{ items|tojson }};
+  var itemsBody = document.getElementById("items-body");
+
+  function el(tag, attrs, html) {
+    var e = document.createElement(tag);
+    if (attrs) for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+
+  function addRow(item) {
+    item = item || {description: "", qty: 0, rate: 0, is_discount: 0};
+    var tr = el("tr");
+    tr.innerHTML =
+      '<td><input type="text" class="i-desc" value="' + (item.description || "").replace(/"/g, "&quot;") + '"></td>' +
+      '<td class="num"><input type="number" step="0.01" min="0" class="i-qty" value="' + (item.qty || 0) + '"></td>' +
+      '<td class="num"><input type="number" step="0.01" min="0" class="i-rate" value="' + (item.rate || 0) + '"></td>' +
+      '<td class="num i-amount">0.00</td>' +
+      '<td class="num"><input type="checkbox" class="i-disc" ' + (item.is_discount ? "checked" : "") + '></td>' +
+      '<td><button type="button" class="btn btn-sm btn-icon btn-trash i-del" title="Remove line"><svg class="ico-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button></td>';
+    itemsBody.appendChild(tr);
+    tr.querySelector(".i-del").addEventListener("click", function () {
+      tr.remove(); recalc();
+    });
+    tr.querySelectorAll("input").forEach(function (inp) {
+      inp.addEventListener("input", recalc);
+      inp.addEventListener("change", recalc);
+    });
+    recalc();
+  }
+
+  function gatherItems() {
+    var rows = [];
+    itemsBody.querySelectorAll("tr").forEach(function (tr) {
+      rows.push({
+        description: tr.querySelector(".i-desc").value,
+        qty: Math.max(0, parseFloat(tr.querySelector(".i-qty").value) || 0),
+        rate: Math.max(0, parseFloat(tr.querySelector(".i-rate").value) || 0),
+        is_discount: tr.querySelector(".i-disc").checked ? 1 : 0,
+        _amountCell: tr.querySelector(".i-amount"),
+      });
+    });
+    return rows;
+  }
+
+  function money(n) {
+    return (n || 0).toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+  function money0(n) {
+    return Math.round(n || 0).toLocaleString("en-US");
+  }
+
+  function recalc() {
+    var currency = document.getElementById("f-currency").value;
+    var sym = CUR_SYMBOLS[currency] || "";
+    var items = gatherItems();
+    var net = 0;
+    items.forEach(function (it) {
+      var amt = it.qty * it.rate;
+      it._amountCell.textContent = (it.is_discount ? "-" : "") + money(Math.abs(amt));
+      net += it.is_discount ? -Math.abs(amt) : amt;
+    });
+    var cgstRate = parseFloat(document.getElementById("f-cgst").value) || 0;
+    var sgstRate = parseFloat(document.getElementById("f-sgst").value) || 0;
+    var useIgst = document.getElementById("f-use-igst").checked;
+    var igstRate = parseFloat(document.getElementById("f-igst").value) || 0;
+    var totalGstRate = useIgst ? igstRate : (cgstRate + sgstRate);
+    // push the GST line(s) onto `rows`: a single "GST" line for iGST, else CGST + SGST
+    function pushGst(base, sfx) {
+      if (useIgst) {
+        if (igstRate > 0) rows.push(["GST (" + igstRate.toFixed(2) + "%)", money(base * igstRate / 100) + sfx]);
+      } else {
+        if (cgstRate > 0) rows.push(["CGST (" + cgstRate.toFixed(2) + "%)", money(base * cgstRate / 100) + sfx]);
+        if (sgstRate > 0) rows.push(["SGST (" + sgstRate.toFixed(2) + "%)", money(base * sgstRate / 100) + sfx]);
+      }
+    }
+
+    // --- meta ---
+    document.getElementById("pv-number").textContent = "No: " + document.getElementById("f-number").value;
+    document.getElementById("pv-date").textContent = "Date: " + document.getElementById("f-date").value;
+    var ps = document.getElementById("f-pstart").value, pe = document.getElementById("f-pend").value;
+    document.getElementById("pv-period").textContent = (ps && pe) ? ("Period: " + ps + " to " + pe) : "";
+
+    // --- client ---
+    var cn = document.querySelector("[name=client_name]").value;
+    var ca = document.querySelector("[name=client_address]").value;
+    var cg = document.querySelector("[name=client_gstin]").value;
+    var clientHtml = "<strong>" + (cn || "") + "</strong>";
+    if (ca) clientHtml += "<br>" + ca.replace(/\n/g, "<br>");
+    if (cg) clientHtml += "<br>GSTIN: " + cg;
+    document.getElementById("pv-client").innerHTML = clientHtml;
+
+    // --- items ---
+    var ib = document.getElementById("pv-items");
+    ib.innerHTML = "";
+    items.forEach(function (it, idx) {
+      var amt = it.qty * it.rate;
+      var shown = (it.is_discount ? -Math.abs(amt) : amt);
+      var tr = el("tr");
+      tr.innerHTML = "<td>" + (idx + 1) + "</td><td>" + (it.description || "") +
+        "</td><td class='num'>" + money(it.qty) + "</td><td class='num'>" + money(it.rate) +
+        "</td><td class='num'>" + money(shown) + "</td>";
+      ib.appendChild(tr);
+    });
+
+    // --- totals ---
+    var showInr = (currency === "USD") && document.getElementById("f-showinr").checked;
+    var inrRate = parseFloat(document.getElementById("f-inrrate").value) || 0;
+    var inrDate = document.getElementById("f-inrdate").value;
+
+    var rows = [];
+    rows.push(["Subtotal", money(net) + " " + currency]);
+
+    if (showInr && inrRate > 0) {
+      // GST is applied on the INR-converted amount, not on USD.
+      rows.push(["<strong>TOTAL</strong>", "<strong>" + money(net) + " " + currency + "</strong>"]);
+      var rateLabel = "Exchange rate" + (inrDate ? " (as on " + inrDate + ")" : "");
+      rows.push([rateLabel, "1 USD = " + money(inrRate) + " INR"]);
+      var inrSubtotal = net * inrRate;
+      rows.push(["Subtotal (INR)", money(inrSubtotal) + " INR"]);
+      pushGst(inrSubtotal, " INR");
+      var inrGst = inrSubtotal * totalGstRate / 100;
+      rows.push(["<strong>TOTAL (INR)</strong>", "<strong>" + money0(inrSubtotal + inrGst) + " INR</strong>"]);
+    } else if (currency === "USD") {
+      // USD invoice without INR conversion: NO GST (GST is INR-only).
+      var total = net;
+      var rounded = Math.round(total);
+      var diff = rounded - total;
+      if (Math.abs(diff) >= 0.005) {
+        rows.push(["Round off", money(diff) + " " + currency]);
+        rows.push(["<strong>TOTAL</strong>", "<strong>" + money0(rounded) + " " + currency + "</strong>"]);
+      } else {
+        rows.push(["<strong>TOTAL</strong>", "<strong>" + money(total) + " " + currency + "</strong>"]);
+      }
+    } else {
+      // INR-native invoice: GST already on INR amounts.
+      pushGst(net, " " + currency);
+      var gstN = net * totalGstRate / 100;
+      rows.push(["<strong>TOTAL</strong>", "<strong>" + money(net + gstN) + " " + currency + "</strong>"]);
+    }
+
+    var th = "";
+    rows.forEach(function (r) {
+      th += "<div class='pv-tot-row'><span>" + r[0] + "</span><span>" + r[1] + "</span></div>";
+    });
+    document.getElementById("pv-totals").innerHTML = th;
+
+    // --- notes / fx note ---
+    var notes = document.getElementById("f-notes").value;
+    var notesHtml = "";
+    if (currency === "INR") {
+      var fx = parseFloat(document.getElementById("f-fx").value) || 1;
+      if (fx !== 1) notesHtml += "<div class='muted small'>Amounts converted at USD→INR rate of " + money(fx) + "</div>";
+    }
+    if (notes) notesHtml += "<div><strong>Notes:</strong> " + notes.replace(/\n/g, "<br>") + "</div>";
+    document.getElementById("pv-notes").innerHTML = notesHtml;
+
+    syncItemNames();
+  }
+
+  // serialize rows into hidden index-suffixed inputs so the server can read them
+  function syncItemNames() {
+    // remove old hidden inputs
+    document.querySelectorAll(".item-hidden").forEach(function (n) { n.remove(); });
+    var form = document.getElementById("inv-form");
+    var rows = itemsBody.querySelectorAll("tr");
+    rows.forEach(function (tr, i) {
+      function hid(name, val) {
+        var inp = el("input", {type: "hidden", name: name, value: val, class: "item-hidden"});
+        form.appendChild(inp);
+      }
+      hid("item_desc_" + i, tr.querySelector(".i-desc").value);
+      hid("item_qty_" + i, tr.querySelector(".i-qty").value || 0);
+      hid("item_rate_" + i, tr.querySelector(".i-rate").value || 0);
+      hid("item_discount_" + i, tr.querySelector(".i-disc").checked ? "1" : "0");
+    });
+  }
+
+  // --- currency toggle shows/hides fx + inr boxes ---
+  document.getElementById("f-currency").addEventListener("change", function () {
+    var c = this.value;
+    document.getElementById("fx-wrap").style.display = (c === "INR") ? "" : "none";
+    document.getElementById("inr-box").style.display = (c === "USD") ? "" : "none";
+    recalc();
+  });
+
+  // --- recalc on any builder input ---
+  ["f-number","f-date","f-use-igst","f-igst","f-cgst","f-sgst","f-showinr","f-inrrate","f-inrdate","f-fx","f-notes","f-pstart","f-pend"]
+    .forEach(function (id) {
+      var e = document.getElementById(id);
+      if (e) { e.addEventListener("input", recalc); e.addEventListener("change", recalc); }
+    });
+  ["client_name","client_address","client_gstin"].forEach(function (n) {
+    var e = document.querySelector("[name=" + n + "]");
+    if (e) e.addEventListener("input", recalc);
+  });
+
+  // --- add line ---
+  document.getElementById("btn-add-line").addEventListener("click", function () {
+    addRow({description: "", qty: 1, rate: 0, is_discount: 0});
+  });
+
+  // --- pull from timesheet ---
+  document.getElementById("btn-pull").addEventListener("click", function () {
+    var start = document.getElementById("f-pstart").value;
+    var end = document.getElementById("f-pend").value;
+    var currency = document.getElementById("f-currency").value;
+    var fx = parseFloat(document.getElementById("f-fx").value) || 1;
+    if (!start || !end) { alert("Set a period start and end first."); return; }
+    var url = "{{ url_for('invoice_lines') }}?start=" + start + "&end=" + end +
+              "&currency=" + currency + "&fx=" + fx;
+    fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.items || !data.items.length) { alert("No hours found in that period."); return; }
+      itemsBody.innerHTML = "";
+      data.items.forEach(function (it) { addRow(it); });
+      recalc();
+    });
+  });
+
+  // --- init ---
+  if (INITIAL_ITEMS && INITIAL_ITEMS.length) {
+    INITIAL_ITEMS.forEach(function (it) { addRow(it); });
+  } else {
+    addRow({description: "{{ 'IBMi RPG Consulting' }}", qty: 0, rate: 0, is_discount: 0});
+  }
+  recalc();
+  document.getElementById("inv-form").addEventListener("submit", syncItemNames);
+})();
+</script>
+{% endblock %}

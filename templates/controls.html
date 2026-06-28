@@ -1,0 +1,214 @@
+{% extends "layout.html" %}
+{% block title %}TZ Controls{% endblock %}
+{% block content %}
+<h1>TZ Controls</h1>
+<p class="muted">App-wide settings shared by <strong>every</strong> client — your business identity, the
+mail server used to send all invoices, and database backups. Per-client billing, GST, recipients
+and message templates live on each client's <a href="{{ url_for('settings') }}">Settings</a> page.</p>
+
+<div class="tabset">
+  <div class="tab-bar">
+    <button type="button" class="tab-btn" data-tab="appearance">Appearance</button>
+    <button type="button" class="tab-btn" data-tab="backup">Backup</button>
+    <button type="button" class="tab-btn" data-tab="business">Business</button>
+    <button type="button" class="tab-btn" data-tab="mail">Mail Server</button>
+  </div>
+
+  <!-- one form spans the Business + Mail panels so a Save in either persists all
+       fields (hidden panels still submit their inputs). -->
+  <form method="post" action="{{ url_for('controls_save') }}" class="entry-form inplace mgmt">
+    <div class="tab-panel" data-tab="business">
+      <div class="card">
+        <fieldset>
+          <legend>Business identity ("From")</legend>
+          <div>
+            <label>Business name</label>
+            <input type="text" name="biz_name" value="{{ settings.biz_name or '' }}">
+          </div>
+          <div>
+            <label>Business address</label>
+            <textarea name="biz_address" rows="3">{{ settings.biz_address or '' }}</textarea>
+          </div>
+          <div class="form-grid">
+            <div>
+              <label>Email</label>
+              <input type="email" name="biz_email" value="{{ settings.biz_email or '' }}">
+            </div>
+            <div>
+              <label>GSTIN</label>
+              <input type="text" name="biz_gstin" value="{{ settings.biz_gstin or '' }}">
+            </div>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Bank / payment details</legend>
+          <textarea name="bank_details" rows="3">{{ settings.bank_details or '' }}</textarea>
+        </fieldset>
+        <button class="btn btn-primary" type="submit">Save</button>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-tab="mail">
+      <div class="card">
+        <fieldset>
+          <legend>Mail server (SMTP)</legend>
+          <div class="form-grid">
+            <div>
+              <label>SMTP host</label>
+              <input type="text" name="smtp_host" value="{{ settings.smtp_host or '' }}" placeholder="smtp.gmail.com">
+            </div>
+            <div>
+              <label>Port</label>
+              <input type="number" name="smtp_port" value="{{ settings.smtp_port or 587 }}">
+            </div>
+          </div>
+          <div class="form-grid">
+            <div>
+              <label>Username</label>
+              <input type="text" name="smtp_user" value="{{ settings.smtp_user or '' }}" placeholder="you@gmail.com">
+            </div>
+            <div>
+              <label>Password {% if settings.smtp_password %}<span class="muted small">(saved — leave blank to keep)</span>{% endif %}</label>
+              <input type="password" name="smtp_password" value="" autocomplete="new-password">
+            </div>
+          </div>
+          <label class="check">
+            <input type="checkbox" name="smtp_use_tls" value="1" {{ 'checked' if settings.smtp_use_tls }}>
+            Use TLS / STARTTLS (recommended — Gmail uses port 587 with TLS)
+          </label>
+          <div class="form-grid">
+            <div>
+              <label>From name</label>
+              <input type="text" name="smtp_from_name" value="{{ settings.smtp_from_name or '' }}">
+            </div>
+            <div>
+              <label>From email</label>
+              <input type="text" name="smtp_from_email" value="{{ settings.smtp_from_email or '' }}" placeholder="you@gmail.com">
+            </div>
+          </div>
+          <p class="muted small">For Gmail, use an <strong>App Password</strong> (Google account → Security →
+          2-Step Verification → App passwords), not your normal password.</p>
+        </fieldset>
+        <button class="btn btn-primary" type="submit">Save</button>
+      </div>
+    </div>
+  </form>
+
+  <div class="tab-panel" data-tab="backup">
+    <div class="card">
+      <h3>Backup</h3>
+      <p class="muted">Make an immediate timestamped copy of the database into the <code>backups/</code> folder.
+      (A backup is also taken automatically each time the app starts.)</p>
+      <form method="post" action="{{ url_for('controls_backup') }}" class="inplace mgmt">
+        <button class="btn" type="submit">{{ ico('save') }} Back up now</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-tab="appearance">
+    <div class="card">
+      <h3>Button &amp; control style</h3>
+      <p class="muted">Choose how buttons, dropdowns and tabs look across the whole app. Each style works with
+      both light and dark mode (toggle with the {{ ico('moon') }} button up top). Saved on this device.</p>
+      {% set ui_themes = [
+        {'id': 'classic',    'name': 'Classic 3D',  'desc': 'Raised silver keys (default)'},
+        {'id': 'flat',       'name': 'Flat',        'desc': 'Simple, no shadow'},
+        {'id': 'soft',       'name': 'Soft',        'desc': 'Floating soft shadow'},
+        {'id': 'outline',    'name': 'Outline',     'desc': 'Bold ghost outline'},
+        {'id': 'pill',       'name': 'Pill',        'desc': 'Rounded gradient capsule'},
+        {'id': 'sharp',      'name': 'Sharp',       'desc': 'Hard offset shadow'},
+        {'id': 'neumorphic', 'name': 'Neumorphic',  'desc': 'Soft embossed'}
+      ] %}
+      <div class="theme-picker" id="theme-picker">
+        {% for t in ui_themes %}
+        <button type="button" class="theme-opt" data-opt="{{ t.id }}">
+          <span class="theme-opt-preview" data-ui-theme="{{ t.id }}">
+            <span class="btn btn-sm btn-primary">Save</span>
+            <span class="btn btn-sm btn-icon">{{ ico('edit') }}</span>
+          </span>
+          <span class="theme-opt-name">{{ t.name }}<small>{{ t.desc }}</small></span>
+          <span class="theme-opt-check">{{ ico('check') }}</span>
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Icon pack</h3>
+      <p class="muted">How icons look on every button and menu. Icons sitting on a coloured button
+      stay that button's colour so they remain legible.</p>
+      {% set glyph = 'color:var(--ic);background:none;padding:0;width:24px;height:24px' %}
+      <div class="theme-picker" id="icon-picker">
+        <button type="button" class="theme-opt" data-opt="semantic">
+          <span class="theme-opt-preview icon-style-preview">
+            {{ ico('edit', '', glyph, false) }}{{ ico('check', '', glyph, false) }}{{ ico('calendar', '', glyph, false) }}{{ ico('settings', '', glyph, false) }}
+          </span>
+          <span class="theme-opt-name">Semantic colour<small>Each icon its meaning colour</small></span>
+          <span class="theme-opt-check">{{ ico('check', '', '', false) }}</span>
+        </button>
+        <button type="button" class="theme-opt" data-opt="tile">
+          <span class="theme-opt-preview icon-style-preview">
+            {{ ico('edit', 'prev-tile', 'background:var(--ic)', false) }}{{ ico('check', 'prev-tile', 'background:var(--ic)', false) }}{{ ico('calendar', 'prev-tile', 'background:var(--ic)', false) }}{{ ico('settings', 'prev-tile', 'background:var(--ic)', false) }}
+          </span>
+          <span class="theme-opt-name">Colour tile<small>White glyph on a colour square</small></span>
+          <span class="theme-opt-check">{{ ico('check', '', '', false) }}</span>
+        </button>
+        <button type="button" class="theme-opt" data-opt="fc">
+          <span class="theme-opt-preview icon-style-preview">
+            {{ alt_ico('fc', 'edit') }}{{ alt_ico('fc', 'view') }}{{ alt_ico('fc', 'delete') }}{{ alt_ico('fc', 'calendar') }}
+          </span>
+          <span class="theme-opt-name">Flat colour<small>Real Icons8 multicolour set (default)</small></span>
+          <span class="theme-opt-check">{{ ico('check', '', '', false) }}</span>
+        </button>
+        <button type="button" class="theme-opt" data-opt="solar">
+          <span class="theme-opt-preview icon-style-preview">
+            {{ alt_ico('solar', 'edit') }}{{ alt_ico('solar', 'view') }}{{ alt_ico('solar', 'delete') }}{{ alt_ico('solar', 'calendar') }}
+          </span>
+          <span class="theme-opt-name">Solar duotone<small>Bold two-tone — modern app look</small></span>
+          <span class="theme-opt-check">{{ ico('check', '', '', false) }}</span>
+        </button>
+        <button type="button" class="theme-opt" data-opt="ms">
+          <span class="theme-opt-preview icon-style-preview">
+            {{ alt_ico('ms', 'edit') }}{{ alt_ico('ms', 'view') }}{{ alt_ico('ms', 'delete') }}{{ alt_ico('ms', 'calendar') }}
+          </span>
+          <span class="theme-opt-name">Material Symbols<small>Google's rounded system icons</small></span>
+          <span class="theme-opt-check">{{ ico('check', '', '', false) }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    var root = document.documentElement;
+    /* wire one picker: clicking a card sets the attribute on <html>, saves it, and
+       marks the selected card. Each option is a real attribute value (no clearing),
+       so every pack — including the defaults — is an explicit, persistent CSS state. */
+    function setupPicker(pickerId, attr, key, def) {
+      var picker = document.getElementById(pickerId);
+      if (!picker) return;
+      var opts = picker.querySelectorAll(".theme-opt");
+      var current = localStorage.getItem(key) || def;
+      function mark() {
+        opts.forEach(function (o) {
+          o.classList.toggle("selected", o.getAttribute("data-opt") === current);
+        });
+      }
+      mark();
+      opts.forEach(function (o) {
+        o.addEventListener("click", function () {
+          current = o.getAttribute("data-opt");
+          root.setAttribute(attr, current);
+          localStorage.setItem(key, current);
+          mark();
+        });
+      });
+    }
+    setupPicker("theme-picker", "data-ui-theme", "uiTheme", "classic");
+    setupPicker("icon-picker", "data-icon-style", "iconStyle", "fc");
+  })();
+</script>
+{% endblock %}

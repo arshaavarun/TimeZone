@@ -1,0 +1,5 @@
+<nav class="tabs">
+  {% if request.endpoint != 'home' %}
+    <a href="{{ url_for('home') }}" class="nav-btn nav-home">{{ ico('home') }} Home</a>
+  {% endif %}
+</nav>

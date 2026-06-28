@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}TimeZone{% endblock %}</title>
+  <link rel="stylesheet" href="{{ asset_url('style.css') }}">
+  <script>
+    /* apply the saved light/dark mode + UI-theme before first paint (no flash) */
+    (function () {
+      try {
+        var r = document.documentElement;
+        var t = localStorage.getItem("theme"); if (t) r.setAttribute("data-theme", t);
+        var u = localStorage.getItem("uiTheme"); if (u) r.setAttribute("data-ui-theme", u);
+        var i = localStorage.getItem("iconStyle");
+        /* drop retired packs (ios/win/android) so an old saved value falls back to default */
+        if (i && ["semantic", "tile", "fc", "solar", "ms"].indexOf(i) < 0) { localStorage.removeItem("iconStyle"); i = null; }
+        /* Flat colour ("fc") is the app default — set it explicitly when nothing is
+           saved (the attribute is always present so each pack is a real CSS state). */
+        if (!i) i = "fc";
+        r.setAttribute("data-icon-style", i);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body class="{{ 'read-only ' if read_only }}{{ 'tinted' if client_hue is not none }}"{% if client_hue is not none %} style="--client-hue: {{ client_hue }};{% if client_tint_light is not none %} --ct-light: {{ client_tint_light }}%;{% endif %}{% if client_tint_dark is not none %} --ct-dark: {{ client_tint_dark }}%;{% endif %}"{% endif %}>
+  <script>
+    /* Client-switch entrance: when we arrive here right after a switch, render
+       the page in the PREVIOUS client's colour first (before first paint, so no
+       flash), stash the new colour as the target, then app.js plays the wave +
+       recolour to it — so data and animation arrive together. */
+    (function () {
+      try {
+        var e = sessionStorage.getItem("tz_switch_entrance");
+        if (!e) return;
+        sessionStorage.removeItem("tz_switch_entrance");
+        e = JSON.parse(e);
+        var b = document.body;
+        window.__tzEntrance = {
+          toHue: b.style.getPropertyValue("--client-hue").trim(),
+          toLight: b.style.getPropertyValue("--ct-light").trim(),
+          toDark: b.style.getPropertyValue("--ct-dark").trim()
+        };
+        if (e.fromHue) b.style.setProperty("--client-hue", e.fromHue);
+        if (e.fromLight) b.style.setProperty("--ct-light", e.fromLight);
+        if (e.fromDark) b.style.setProperty("--ct-dark", e.fromDark);
+      } catch (_) {}
+    })();
+  </script>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('home') }}" title="TimeZone">
+      <svg class="brand-icon" viewBox="20 45 520 450" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TimeZone">
+        <g transform="translate(281 235) scale(1.00333) translate(-281 -235)" stroke="var(--logo-ink)" stroke-width="15.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path fill="var(--logo-ink)" stroke="none" d="M365 65 L415 115 Q420 120 408 120 H376 a16 16 0 0 1 -16 -16 V67 Q360 60 365 65 Z"/>
+          <path d="M142 232 V82 a22 22 0 0 1 22 -22 H353 Q360 60 365 65 L415 115 Q420 120 420 127 V207"/>
+          <path d="M270 410 H164 a22 22 0 0 1 -22 -22 V380"/>
+        </g>
+        <g fill="#8A8F98">
+          <rect x="174" y="106" width="140" height="16" rx="8"/>
+          <rect x="174" y="142" width="140" height="16" rx="8"/>
+          <rect x="174" y="178" width="88" height="16" rx="8"/>
+        </g>
+        <!-- black backing (wider) so the accent motion lines get a thin black edge
+             in light mode; --accent-edge is transparent in dark mode. -->
+        <g stroke="var(--accent-edge)" stroke-width="30" stroke-linecap="round">
+          <line x1="74" y1="264" x2="84" y2="264"/>
+          <line x1="126" y1="264" x2="186" y2="264"/>
+          <line x1="35" y1="306" x2="166" y2="306"/>
+          <line x1="78" y1="348" x2="88" y2="348"/>
+          <line x1="130" y1="348" x2="184" y2="348"/>
+        </g>
+        <g stroke="var(--client-accent)" stroke-width="22" stroke-linecap="round">
+          <line x1="74" y1="264" x2="84" y2="264"/>
+          <line x1="126" y1="264" x2="186" y2="264"/>
+          <line x1="35" y1="306" x2="166" y2="306"/>
+          <line x1="78" y1="348" x2="88" y2="348"/>
+          <line x1="130" y1="348" x2="184" y2="348"/>
+        </g>
+        <g transform="translate(-50 -35)">
+        <circle cx="400" cy="350" r="135" stroke="var(--topbar-bg)" stroke-width="14" fill="none"/>
+        <!-- fill the GAP between the two accent rings with black in light mode
+             (--accent-edge is transparent in dark, so it only shows in light). The
+             coloured rings are drawn on top, leaving black only in the gap. The ring
+             is deliberately wide so it tucks well under both coloured rings — the
+             visible black is still just the gap, but no hairline slivers at zoom. -->
+        <circle cx="400" cy="350" r="110.75" stroke="var(--accent-edge)" stroke-width="16" fill="none"/>
+        <circle cx="400" cy="350" r="121" stroke="var(--client-accent)" stroke-width="14" fill="none"/>
+        <circle cx="400" cy="350" r="104" stroke="var(--client-accent)" stroke-width="7" fill="none"/>
+        <g transform="translate(0 4) translate(400 350) scale(1.05) translate(-400 -350)">
+        <g fill="var(--logo-ink)"><rect x="388" y="262" width="24" height="15" rx="7"/><rect x="396" y="274" width="8" height="13"/></g>
+        <g transform="rotate(48 400 350)"><g fill="var(--logo-ink)"><rect x="391" y="266" width="18" height="12" rx="6"/><rect x="397" y="276" width="6" height="11"/></g></g>
+        <g transform="rotate(-48 400 350)"><g fill="var(--logo-ink)"><rect x="391" y="266" width="18" height="12" rx="6"/><rect x="397" y="276" width="6" height="11"/></g></g>
+        <circle cx="400" cy="350" r="55" fill="var(--logo-facefill)"/>
+        <circle cx="400" cy="350" r="59" stroke="var(--logo-ink)" stroke-width="10" fill="none"/>
+        <g fill="var(--logo-ink)">
+          <circle cx="400" cy="308" r="6"/><circle cx="442" cy="350" r="6"/>
+          <circle cx="400" cy="392" r="6"/><circle cx="358" cy="350" r="6"/>
+        </g>
+        <g stroke="var(--logo-ink)" stroke-width="7" stroke-linecap="round">
+          <line x1="400" y1="350" x2="400" y2="322"/>
+          <line x1="400" y1="350" x2="431" y2="319"/>
+        </g>
+        <circle cx="400" cy="350" r="7" fill="var(--logo-ink)"/>
+        </g>
+        </g>
+      </svg>
+      <span class="brand-word"><span class="wt"><span class="cap">T</span>ime</span><span class="wz"><span class="cap">Z</span>one</span></span>
+    </a>
+    {% include "_tabs.html" %}
+
+    {% if current_client %}
+    <div class="client-heading{% if request.endpoint == 'home' %} is-switch{% endif %}" title="Current client">
+      {% if request.endpoint == 'home' %}
+      <button type="button" class="client-switcher" id="client-switcher-btn"
+              data-current-id="{{ current_client.id }}" aria-haspopup="true" aria-expanded="false"
+              title="Switch client">
+        <span class="client-name">{{ current_client.name }}</span>
+        <svg class="cs-caret" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+          <path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="currentColor"
+                stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <div class="client-switch-menu" id="client-switch-menu" hidden role="menu">
+        {# render all active clients; the current one is hidden via CSS (.csm-item.current)
+           and toggled on switch, so the active client never appears even after an
+           AJAX switch (no reload). #}
+        {% for c in clients if c.status == 'active' %}
+        <button type="button" class="csm-item{% if c.id == current_client.id %} current{% endif %}"
+                role="menuitem" data-id="{{ c.id }}" data-name="{{ c.name }}"
+                data-hue="{{ c.hue }}" data-light="{{ c.tint_light }}" data-dark="{{ c.tint_dark }}">
+          <span class="csm-dot" style="background: hsl({{ c.hue }} 78% 50%);"></span>{{ c.name }}
+        </button>
+        {% endfor %}
+        <div class="csm-empty muted small" hidden>No other active clients.</div>
+      </div>
+      {% else %}
+      <span class="client-name">{{ current_client.name }}</span>
+      {% endif %}
+      {% if read_only %}<span class="ro-chip">read-only</span>{% endif %}
+    </div>
+    {% endif %}
+
+    <div class="topbar-actions">
+      <button id="theme-toggle" class="theme-btn" title="Toggle theme" type="button">{{ ico('moon', 'icon-moon') }}{{ ico('sun', 'icon-sun') }}</button>
+
+      <div class="tz-menu" id="tz-menu">
+        <button id="tz-menu-btn" class="clock-btn" type="button"
+                title="Clients &amp; Controls" aria-haspopup="true" aria-expanded="false">
+          <!-- the TimeZone logo's stopwatch alone: just the dial face + crown
+               buttons (the outer blue rings are dropped), cropped tight so it
+               fills the button. The dial is coloured in the current client's
+               outlines/hands stay neutral; the colour fills the dial face. -->
+          <svg class="clock-icon" viewBox="305 248 190 190" width="32" height="32"
+               role="img" aria-label="Clients & Controls">
+            <g transform="translate(0 4) translate(400 350) scale(1.05) translate(-400 -350)">
+              <g fill="var(--logo-ink)"><rect x="388" y="262" width="24" height="15" rx="7"/><rect x="396" y="274" width="8" height="13"/></g>
+              <g transform="rotate(48 400 350)"><g fill="var(--logo-ink)"><rect x="391" y="266" width="18" height="12" rx="6"/><rect x="397" y="276" width="6" height="11"/></g></g>
+              <g transform="rotate(-48 400 350)"><g fill="var(--logo-ink)"><rect x="391" y="266" width="18" height="12" rx="6"/><rect x="397" y="276" width="6" height="11"/></g></g>
+              <circle cx="400" cy="350" r="55" fill="var(--clock-color)"/>
+              <circle cx="400" cy="350" r="59" stroke="var(--logo-ink)" stroke-width="10" fill="none"/>
+              <g fill="var(--clock-ink)">
+                <circle cx="400" cy="308" r="6"/><circle cx="442" cy="350" r="6"/>
+                <circle cx="400" cy="392" r="6"/><circle cx="358" cy="350" r="6"/>
+              </g>
+              <g stroke="var(--clock-ink)" stroke-width="7" stroke-linecap="round">
+                <line x1="400" y1="350" x2="400" y2="322"/>
+                <line x1="400" y1="350" x2="431" y2="319"/>
+              </g>
+              <circle cx="400" cy="350" r="7" fill="var(--clock-ink)"/>
+            </g>
+          </svg>
+        </button>
+
+        <div class="tz-dropdown" id="tz-dropdown" hidden role="menu">
+          <a class="tz-controls-link" role="menuitem" href="{{ url_for('clients_manage') }}">{{ ico('clients') }} Work with Clients</a>
+          <a class="tz-controls-link" role="menuitem" href="{{ url_for('controls') }}">{{ ico('settings') }} TZ Controls</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  {% if read_only %}
+  <div class="ro-banner">
+    Viewing an archived client — <strong>read-only</strong>. Restore it from the
+    {{ ico('clock') }} menu to make changes.
+  </div>
+  {% endif %}
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="toasts" id="toasts">
+        {% for category, msg in messages %}
+          <div class="toast toast-{{ category }}">
+            <span>{{ msg }}</span>
+            <button class="toast-close" type="button" aria-label="Dismiss">×</button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <script src="{{ asset_url('app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

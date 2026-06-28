@@ -1,0 +1,364 @@
+{% extends "layout.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<div class="tabset">
+  <div class="tab-bar">
+    <button type="button" class="tab-btn" data-tab="charge">Charge Types</button>
+    <button type="button" class="tab-btn" data-tab="email">Email</button>
+    <button type="button" class="tab-btn" data-tab="defaults">Entry Defaults</button>
+    <button type="button" class="tab-btn" data-tab="categories">Expense Categories</button>
+    <button type="button" class="tab-btn" data-tab="invoice">Invoice Settings</button>
+  </div>
+
+  <!-- ============ Charge Types tab ============ -->
+  <div class="tab-panel" data-tab="charge">
+    <p class="muted">The base type's USD amount is entered directly. Every other type's USD is derived: <code>base × percent ÷ 100</code>. The <strong>Invoice label</strong> is the line text used when pulling these hours into an invoice.</p>
+
+    <div class="card add-card">
+      <form method="post" action="{{ url_for('charge_types_add') }}" class="add-bar inplace">
+        <div class="add-field">
+          <label>New charge type</label>
+          <input type="text" name="name" placeholder="e.g. Weekend" required>
+        </div>
+        <div class="add-field">
+          <label>Percent %</label>
+          <input type="number" name="percent" placeholder="125" step="0.01" value="100">
+        </div>
+        <div class="add-field grow">
+          <label>Invoice label</label>
+          <input type="text" name="invoice_label" placeholder="RPG Consulting - Weekend Charge">
+        </div>
+        <button class="btn btn-primary" type="submit">Add Entry</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <table class="grid master-table">
+        <thead>
+          <tr><th>Name</th><th class="num">Percent %</th><th class="num">USD / hr</th><th>Invoice label</th><th class="actions-col">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for c in charge_types %}
+            <tr>
+              <td>
+                <form id="crow-{{ c.id }}" method="post" action="{{ url_for('charge_types_update', cid=c.id) }}" class="inplace"></form>
+                <span class="view-only">{{ c.name }}{% if c.is_base %} <span class="tag tag-base">base</span>{% endif %}</span>
+                <input class="edit-only edit-input" form="crow-{{ c.id }}" name="name" value="{{ c.name }}" disabled>
+              </td>
+              <td class="num">
+                <span class="view-only">{{ '%.2f'|format(c.percent) }}</span>
+                {% if c.is_base %}
+                  <input class="edit-only" value="100" readonly disabled>
+                {% else %}
+                  <input class="edit-only edit-input num" form="crow-{{ c.id }}" name="percent" type="number" step="0.01" value="{{ c.percent }}" disabled>
+                {% endif %}
+              </td>
+              <td class="num">
+                <span class="view-only">${{ '%.2f'|format(c.amount_usd) }}</span>
+                {% if c.is_base %}
+                  <input class="edit-only edit-input num" form="crow-{{ c.id }}" name="amount" type="number" step="0.01" value="{{ '%.2f'|format(c.amount_usd) }}" disabled>
+                {% else %}
+                  <span class="edit-only muted small">derived on save</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="view-only">{{ c.invoice_label or '—' }}</span>
+                <input class="edit-only edit-input" form="crow-{{ c.id }}" name="invoice_label" value="{{ c.invoice_label or '' }}" disabled>
+              </td>
+              <td class="actions-col">
+                <button type="button" class="btn btn-sm btn-icon row-edit view-only" title="Edit">{{ ico('edit') }}</button>
+                <button type="submit" form="crow-{{ c.id }}" class="btn btn-sm btn-icon btn-primary edit-only" title="Save">{{ ico('save') }}</button>
+                <button type="button" class="btn btn-sm btn-icon row-cancel edit-only" title="Cancel">{{ ico('cancel') }}</button>
+                {% if not c.is_base %}
+                  <form method="post" action="{{ url_for('charge_types_delete', cid=c.id) }}" class="inline view-only inplace"
+                        onsubmit="return confirm('Delete {{ c.name }}?')">
+                    <button class="btn btn-sm btn-icon btn-trash" type="submit" title="Delete">{{ ico('delete') }}</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============ Invoice Settings tab ============ -->
+  <div class="tab-panel" data-tab="invoice">
+    <div class="card">
+      <form method="post" action="{{ url_for('invoice_settings') }}" class="entry-form inplace">
+        <p class="muted small">Your business identity, bank details and the mail server are shared across all
+        clients — set them in <a href="{{ url_for('controls') }}">TZ Controls</a>. The fields below are
+        specific to <strong>{{ current_client.name if current_client else 'this client' }}</strong>.</p>
+
+        <fieldset>
+          <legend>Client (Bill-To)</legend>
+          <div>
+            <label>Client name</label>
+            <input type="text" name="client_name" value="{{ profile.client_name or '' }}">
+          </div>
+          <div>
+            <label>Client address</label>
+            <textarea name="client_address" rows="2">{{ profile.client_address or '' }}</textarea>
+          </div>
+          <div>
+            <label>Client GSTIN</label>
+            <input type="text" name="client_gstin" value="{{ profile.client_gstin or '' }}">
+          </div>
+        </fieldset>
+
+        <fieldset class="gst-block">
+          <legend>GST defaults</legend>
+          <label class="check">
+            <input type="checkbox" class="use-igst-cb" name="use_igst" value="1" {{ 'checked' if profile.default_use_igst }}>
+            iGST (single GST rate)
+          </label>
+          <div class="gst-igst">
+            <label>Default GST %</label>
+            <input type="number" name="default_igst_rate" step="0.01" value="{{ profile.default_igst_rate or 0 }}">
+          </div>
+          <div class="form-grid gst-split">
+            <div>
+              <label>Default CGST %</label>
+              <input type="number" name="default_cgst_rate" step="0.01" value="{{ profile.default_cgst_rate or 0 }}">
+            </div>
+            <div>
+              <label>Default SGST %</label>
+              <input type="number" name="default_sgst_rate" step="0.01" value="{{ profile.default_sgst_rate or 0 }}">
+            </div>
+          </div>
+          <p class="muted small">New invoices start with this GST setting. With iGST a single “GST” line shows on invoices; otherwise CGST + SGST.</p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Terms</legend>
+          <textarea name="terms" rows="3">{{ profile.terms or '' }}</textarea>
+        </fieldset>
+
+        <button class="btn btn-primary" type="submit">Save settings</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ Email tab ============ -->
+  <div class="tab-panel" data-tab="email">
+    <p class="muted">Each client has its own recipients and message. The mail <strong>server</strong> (SMTP)
+    is shared — configure it once in <a href="{{ url_for('controls') }}">TZ Controls</a>. With
+    <strong>auto-send</strong> on, this client's invoice is emailed every time it is saved.</p>
+
+    <div class="card">
+      <form method="post" action="{{ url_for('email_settings') }}" class="entry-form inplace">
+        <fieldset>
+          <legend>Message</legend>
+          <label class="check">
+            <input type="checkbox" name="email_auto_send" value="1" {{ 'checked' if profile.email_auto_send }}>
+            Auto-send the invoice email every time an invoice is saved
+          </label>
+          <div>
+            <label>Subject</label>
+            <input type="text" name="email_subject" value="{{ profile.email_subject or '' }}">
+          </div>
+          <div>
+            <label>Body</label>
+            <textarea name="email_body" rows="6">{{ profile.email_body or '' }}</textarea>
+          </div>
+          <p class="muted small">Placeholders: <code>{number} {date} {client} {total} {currency} {period} {biz_name}</code></p>
+        </fieldset>
+
+        <div class="row-gap">
+          <button class="btn btn-primary" type="submit">Save email settings</button>
+          <button class="btn" type="submit" form="email-reset-form" title="Restore the application's default subject and body">{{ ico('reactivate') }} Reset to default</button>
+        </div>
+      </form>
+      <form id="email-reset-form" method="post" action="{{ url_for('email_settings_reset') }}"
+            class="inplace" onsubmit="return confirm('Reset the email subject and body to the application default?')"></form>
+    </div>
+
+    <h3>Recipients</h3>
+    <div class="card add-card">
+      <form method="post" action="{{ url_for('email_recipient_add') }}" class="add-bar inplace">
+        <div class="add-field grow">
+          <label>Recipient email</label>
+          <input type="email" name="email" placeholder="client@example.com" required>
+        </div>
+        <div class="add-field">
+          <label>Type</label>
+          <select name="kind">
+            {% for k in recipient_kinds %}<option value="{{ k }}">{{ k|upper }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit">Add recipient</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <table class="grid">
+        <thead><tr><th>Email</th><th>Type</th><th class="actions-col"></th></tr></thead>
+        <tbody>
+          {% for r in email_recipients %}
+            <tr>
+              <td>{{ r.email }}</td>
+              <td><span class="tag tag-base">{{ r.kind|upper }}</span></td>
+              <td class="actions-col">
+                <form method="post" action="{{ url_for('email_recipient_delete', rid=r.id) }}" class="inline inplace"
+                      onsubmit="return confirm('Remove this recipient?')">
+                  <button class="btn btn-sm btn-icon btn-trash" type="submit" title="Remove">{{ ico('delete') }}</button>
+                </form>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3" class="muted">No recipients yet — add at least one above.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <form method="post" action="{{ url_for('email_test') }}" class="inplace">
+        <p class="muted">Save your settings and recipients above, then send a quick test to make sure the mail server works.</p>
+        <button class="btn" type="submit">{{ ico('email') }} Send test email</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ Expense Categories tab ============ -->
+  <div class="tab-panel" data-tab="categories">
+    <p class="muted">Categories available when adding an expense. Inactive ones stay on existing expenses but drop out of the dropdown for new ones.</p>
+
+    <div class="card add-card">
+      <form method="post" action="{{ url_for('expense_category_add') }}" class="add-bar inplace" autocomplete="off">
+        <div class="add-field grow">
+          <label>New category</label>
+          <input type="text" name="name" placeholder="e.g. Software" required>
+        </div>
+        <div class="add-field">
+          <label>Status</label>
+          <select name="status">
+            {% for st in category_statuses %}<option value="{{ st }}">{{ st }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit">Add Entry</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <table class="grid master-table">
+        <thead>
+          <tr><th>Name</th><th>Status</th><th class="actions-col">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for c in expense_categories %}
+            <tr>
+              <td>
+                <form id="ecrow-{{ c.id }}" method="post" action="{{ url_for('expense_category_update', cid=c.id) }}" class="inplace"></form>
+                <span class="view-only">{{ c.name }}</span>
+                <input class="edit-only edit-input" form="ecrow-{{ c.id }}" name="name" value="{{ c.name }}" disabled>
+              </td>
+              <td>
+                <span class="view-only"><span class="pill pill-{{ c.status|lower }}">{{ c.status }}</span></span>
+                <select class="edit-only edit-input" form="ecrow-{{ c.id }}" name="status" disabled>
+                  {% for st in category_statuses %}<option value="{{ st }}" {{ 'selected' if st == c.status }}>{{ st }}</option>{% endfor %}
+                </select>
+              </td>
+              <td class="actions-col">
+                <button type="button" class="btn btn-sm btn-icon row-edit view-only" title="Edit">{{ ico('edit') }}</button>
+                <button type="submit" form="ecrow-{{ c.id }}" class="btn btn-sm btn-icon btn-primary edit-only" title="Save">{{ ico('save') }}</button>
+                <button type="button" class="btn btn-sm btn-icon row-cancel edit-only" title="Cancel">{{ ico('cancel') }}</button>
+                <form method="post" action="{{ url_for('expense_category_delete', cid=c.id) }}" class="inline view-only inplace"
+                      onsubmit="return confirm('Delete category {{ c.name }}?')">
+                  <button class="btn btn-sm btn-icon btn-trash" type="submit" title="Delete">{{ ico('delete') }}</button>
+                </form>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="3" class="muted">No categories yet — add one above.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============ Entry Defaults tab ============ -->
+  <div class="tab-panel" data-tab="defaults">
+    <p class="muted">When the chosen field matches the value below in the Add-entry form, the listed fields are auto-filled. Leave a field blank to not set it.</p>
+
+    <div class="card add-card">
+      <form method="post" action="{{ url_for('entry_defaults_add') }}" class="add-bar inplace">
+        <div class="add-field">
+          <label>When</label>
+          <select name="trigger_field">
+            {% for f in default_fields %}<option value="{{ f }}">{{ default_field_labels[f] }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="add-field">
+          <label>equals</label>
+          <input type="text" name="trigger_value" placeholder="e.g. Status Call" required>
+        </div>
+        <div class="add-field">
+          <label>set Sub Task</label>
+          <input type="text" name="set_sub_task" placeholder="(optional)">
+        </div>
+        <div class="add-field">
+          <label>set Hours</label>
+          <input type="number" name="set_hours" step="0.25" min="0" placeholder="(optional)">
+        </div>
+        <div class="add-field grow">
+          <label>set Description</label>
+          <input type="text" name="set_description" placeholder="(optional)">
+        </div>
+        <button class="btn btn-primary" type="submit">Add Entry</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <table class="grid master-table">
+        <thead>
+          <tr><th>When</th><th>Equals</th><th>Set Sub Task</th><th class="num">Set Hours</th><th>Set Description</th><th class="actions-col">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for r in entry_defaults %}
+            <tr>
+              <td>
+                <form id="drow-{{ r.id }}" method="post" action="{{ url_for('entry_defaults_update', rid=r.id) }}" class="inplace"></form>
+                <span class="view-only">{{ default_field_labels[r.trigger_field] }}</span>
+                <select class="edit-only edit-input" form="drow-{{ r.id }}" name="trigger_field" disabled>
+                  {% for f in default_fields %}<option value="{{ f }}" {{ 'selected' if f == r.trigger_field }}>{{ default_field_labels[f] }}</option>{% endfor %}
+                </select>
+              </td>
+              <td>
+                <span class="view-only">{{ r.trigger_value }}</span>
+                <input class="edit-only edit-input" form="drow-{{ r.id }}" name="trigger_value" value="{{ r.trigger_value }}" disabled>
+              </td>
+              <td>
+                <span class="view-only">{{ r.set_sub_task or '—' }}</span>
+                <input class="edit-only edit-input" form="drow-{{ r.id }}" name="set_sub_task" value="{{ r.set_sub_task or '' }}" disabled>
+              </td>
+              <td class="num">
+                <span class="view-only">{{ '%g'|format(r.set_hours) if r.set_hours is not none else '—' }}</span>
+                <input class="edit-only edit-input num" form="drow-{{ r.id }}" name="set_hours" type="number" step="0.25" min="0" value="{{ r.set_hours if r.set_hours is not none else '' }}" disabled>
+              </td>
+              <td>
+                <span class="view-only">{{ r.set_description or '—' }}</span>
+                <input class="edit-only edit-input" form="drow-{{ r.id }}" name="set_description" value="{{ r.set_description or '' }}" disabled>
+              </td>
+              <td class="actions-col">
+                <button type="button" class="btn btn-sm btn-icon row-edit view-only" title="Edit">{{ ico('edit') }}</button>
+                <button type="submit" form="drow-{{ r.id }}" class="btn btn-sm btn-icon btn-primary edit-only" title="Save">{{ ico('save') }}</button>
+                <button type="button" class="btn btn-sm btn-icon row-cancel edit-only" title="Cancel">{{ ico('cancel') }}</button>
+                <form method="post" action="{{ url_for('entry_defaults_delete', rid=r.id) }}" class="inline view-only inplace"
+                      onsubmit="return confirm('Delete this rule?')">
+                  <button class="btn btn-sm btn-icon btn-trash" type="submit" title="Delete">{{ ico('delete') }}</button>
+                </form>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="muted">No entry defaults yet — add one above.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

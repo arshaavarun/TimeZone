@@ -1,0 +1,219 @@
+{% extends "layout.html" %}
+{% block title %}Maintain Tasks{% endblock %}
+
+{% macro task_row(t, completed=false) %}
+  <tr>
+    <td>
+      <form id="trow-{{ t.task_id }}" method="post" action="{{ url_for('tasks_update', task_id=t.task_id) }}" class="inplace" data-soft="#tasks-lists"></form>
+      <strong>{{ t.task_id }}</strong>
+    </td>
+    <td>
+      <span class="view-only">{{ t.description or '—' }}</span>
+      <input class="edit-only edit-input" form="trow-{{ t.task_id }}" name="description" value="{{ t.description or '' }}" disabled>
+    </td>
+    <td><span class="pill pill-{{ t.status|lower }}">{{ t.status }}</span></td>
+    <td>
+      {% if completed %}
+        {{ (t.completed_at or '')[:10] or '—' }}
+      {% elif not t.last_filled %}
+        <span class="task-stale" title="No hours logged since the task was created">Never</span>
+      {% elif t.last_filled < stale_cutoff %}
+        <span class="task-stale" title="Not used in over 30 days — consider marking it completed">{{ t.last_filled }}</span>
+      {% else %}
+        <span class="muted">—</span>
+      {% endif %}
+    </td>
+    <td class="actions-col">
+      <button type="button" class="btn btn-sm btn-icon row-edit view-only" title="Edit">{{ ico('edit') }}</button>
+      <button type="submit" form="trow-{{ t.task_id }}" class="btn btn-sm btn-icon btn-primary edit-only" title="Save">{{ ico('save') }}</button>
+      <button type="button" class="btn btn-sm btn-icon row-cancel edit-only" title="Cancel">{{ ico('cancel') }}</button>
+      {% if completed %}
+        <form method="post" action="{{ url_for('tasks_reactivate', task_id=t.task_id) }}" class="inline view-only inplace" data-soft="#tasks-lists">
+          <button class="btn btn-sm btn-icon" type="submit" title="Reactivate">{{ ico('reactivate') }}</button>
+        </form>
+        <form method="post" action="{{ url_for('tasks_delete', task_id=t.task_id) }}" class="inline view-only inplace" data-soft="#tasks-lists"
+              onsubmit="return confirm('Delete task {{ t.task_id }}? Past logged hours are kept as history.')">
+          <button class="btn btn-sm btn-icon btn-trash" type="submit" title="Delete">{{ ico('delete') }}</button>
+        </form>
+      {% else %}
+        <form method="post" action="{{ url_for('tasks_complete', task_id=t.task_id) }}" class="inline view-only inplace" data-soft="#tasks-lists">
+          <button class="btn btn-sm btn-icon btn-success" type="submit" title="Mark completed">{{ ico('check') }}</button>
+        </form>
+        {% if t.used_this_month %}
+          <span class="muted small lock-flag" title="Locked — has hours logged this month">{{ ico('lock') }}</span>
+        {% else %}
+          <form method="post" action="{{ url_for('tasks_delete', task_id=t.task_id) }}" class="inline view-only inplace" data-soft="#tasks-lists"
+                onsubmit="return confirm('Delete task {{ t.task_id }}? Past logged hours are kept as history.')">
+            <button class="btn btn-sm btn-icon btn-trash" type="submit" title="Delete">{{ ico('delete') }}</button>
+          </form>
+        {% endif %}
+      {% endif %}
+    </td>
+  </tr>
+{% endmacro %}
+
+{% macro subtask_row(s) %}
+  <tr>
+    <td>
+      <form id="srow-{{ s.id }}" method="post" action="{{ url_for('subtasks_update', sid=s.id) }}" class="inplace"></form>
+      <span class="view-only">{{ s.name }}</span>
+      <input class="edit-only edit-input" form="srow-{{ s.id }}" name="name" value="{{ s.name }}" disabled>
+    </td>
+    <td>
+      <span class="view-only"><span class="pill pill-{{ s.status|lower }}">{{ s.status }}</span></span>
+      <select class="edit-only edit-input" form="srow-{{ s.id }}" name="status" disabled>
+        {% for st in subtask_statuses %}<option value="{{ st }}" {{ 'selected' if st == s.status }}>{{ st }}</option>{% endfor %}
+      </select>
+    </td>
+    <td class="actions-col">
+      <button type="button" class="btn btn-sm btn-icon row-edit view-only" title="Edit">{{ ico('edit') }}</button>
+      <button type="submit" form="srow-{{ s.id }}" class="btn btn-sm btn-icon btn-primary edit-only" title="Save">{{ ico('save') }}</button>
+      <button type="button" class="btn btn-sm btn-icon row-cancel edit-only" title="Cancel">{{ ico('cancel') }}</button>
+      <form method="post" action="{{ url_for('subtasks_delete', sid=s.id) }}" class="inline view-only inplace"
+            onsubmit="return confirm('Delete {{ s.name }}?')">
+        <button class="btn btn-sm btn-icon btn-trash" type="submit" title="Delete">{{ ico('delete') }}</button>
+      </form>
+    </td>
+  </tr>
+{% endmacro %}
+
+{% block content %}
+<h1>Maintain Tasks</h1>
+
+<div class="tabset">
+  <div class="tab-bar">
+    {# Tasks is deliberately first (the default landing tab) — it's used far more
+       than Sub Tasks. The other tabbed pages list their tabs alphabetically. #}
+    <button type="button" class="tab-btn" data-tab="tasks">Tasks</button>
+    <button type="button" class="tab-btn" data-tab="subtasks">Sub Tasks</button>
+  </div>
+
+  <!-- ============ Tasks tab ============ -->
+  <div class="tab-panel" data-tab="tasks">
+    <div class="card add-card">
+      <form method="post" action="{{ url_for('tasks_add') }}" class="add-bar inplace" autocomplete="off">
+        <input type="hidden" name="next" value="{{ url_for('tasks') }}">
+        <div class="add-field">
+          <label>New Task ID</label>
+          <input type="text" name="task_id" placeholder="e.g. LC-1024" required>
+        </div>
+        <div class="add-field grow">
+          <label>Description</label>
+          <input type="text" name="description" placeholder="Description">
+        </div>
+        <button class="btn btn-primary" type="submit">Add Entry</button>
+      </form>
+    </div>
+
+    <!-- swapped in place by the row actions (complete / reactivate / delete / edit)
+         so the scroll position is kept — see data-soft + app.js -->
+    <div id="tasks-lists">
+    <h2>Active tasks</h2>
+    <div class="card">
+      <table class="grid master-table">
+        <thead>
+          <tr><th>Task ID</th><th>Description</th><th>Status</th><th>Hours Last Filled</th><th class="actions-col">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for t in active_tasks %}{{ task_row(t) }}{% else %}
+            <tr><td colspan="5" class="muted">No active tasks — add one above.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if completed_count or completed_q %}
+      <!-- the search + page-size sit OUTSIDE #completed-region so they keep focus
+           while only the list below is swapped on change (see app.js data-soft) -->
+      <div class="row-between archive-head-row">
+        <h2 class="archive-head">Completed tasks <span class="muted small">({{ completed_count }})</span></h2>
+        <form class="completed-filter row-gap" method="get" action="{{ url_for('tasks') }}" data-soft="#completed-region">
+          <input type="hidden" name="tab" value="tasks">
+          <input type="search" name="completed_q" value="{{ completed_q }}" placeholder="Search description…" aria-label="Search completed tasks">
+          <select name="completed_limit" aria-label="How many completed tasks to show">
+            {% for n in completed_page_sizes %}<option value="{{ n }}" {{ 'selected' if n == completed_limit }}>Last {{ n }}</option>{% endfor %}
+          </select>
+        </form>
+      </div>
+      <div id="completed-region">
+        <div class="card">
+          <table class="grid master-table">
+            <thead>
+              <tr><th>Task ID</th><th>Description</th><th>Status</th><th>Completed On</th><th class="actions-col">Actions</th></tr>
+            </thead>
+            <tbody>
+              {% for t in completed_tasks %}{{ task_row(t, completed=true) }}{% else %}
+                <tr><td colspan="5" class="muted">No completed tasks match “{{ completed_q }}”.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="muted small">
+          {% if completed_q %}
+            Showing {{ completed_tasks|length }} of {{ completed_matching }} matching “{{ completed_q }}”{% if completed_matching > completed_tasks|length %} — increase the count to see more{% endif %}.
+          {% else %}
+            Showing the last {{ completed_tasks|length }} of {{ completed_count }}{% if completed_count > completed_tasks|length %} — increase the count, or search, to find older ones{% endif %}.
+          {% endif %}
+        </p>
+      </div>
+    {% endif %}
+    </div><!-- /#tasks-lists -->
+  </div>
+
+  <!-- ============ Sub Tasks tab ============ -->
+  <div class="tab-panel" data-tab="subtasks">
+    <div class="card add-card">
+      <form method="post" action="{{ url_for('subtasks_add') }}" class="add-bar inplace" autocomplete="off">
+        <div class="add-field grow">
+          <label>New sub task</label>
+          <input type="text" name="name" placeholder="e.g. Development" required>
+        </div>
+        <div class="add-field">
+          <label>Status</label>
+          <select name="status">
+            {% for st in subtask_statuses %}<option value="{{ st }}">{{ st }}</option>{% endfor %}
+          </select>
+        </div>
+        <button class="btn btn-primary" type="submit">Add Entry</button>
+      </form>
+    </div>
+
+    <h2>Active sub tasks</h2>
+    <div class="card">
+      <table class="grid master-table">
+        <thead>
+          <tr><th>Name</th><th>Status</th><th class="actions-col">Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for s in active_subtasks %}{{ subtask_row(s) }}{% else %}
+            <tr><td colspan="3" class="muted">No active sub tasks — add one above.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if inactive_count %}
+      <h2 class="archive-head">Inactive sub tasks <span class="muted small">({{ inactive_count }})</span></h2>
+      <div class="card">
+        <table class="grid master-table">
+          <thead>
+            <tr><th>Name</th><th>Status</th><th class="actions-col">Actions</th></tr>
+          </thead>
+          <tbody>
+            {% for s in inactive_subtasks %}{{ subtask_row(s) }}{% endfor %}
+          </tbody>
+        </table>
+        {% if inactive_count > archive_limit %}
+          <div class="row-gap">
+            {% if show_all_inactive %}
+              <a class="btn btn-sm" href="{{ url_for('tasks', tab='subtasks') }}">Show recent only</a>
+            {% else %}
+              <a class="btn btn-sm" href="{{ url_for('tasks', tab='subtasks', all_inactive=1) }}">Show all {{ inactive_count }} inactive</a>
+            {% endif %}
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

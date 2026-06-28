@@ -1,0 +1,222 @@
+{% extends "layout.html" %}
+{% block title %}Day · {{ work_date }}{% endblock %}
+{% block content %}
+<div class="day-header">
+  <a class="btn" href="{{ url_for('entry', month=work_date[:7]) }}">← Back to calendar</a>
+  <h1 class="inline-title">{{ work_date }}</h1>
+  <div class="day-status">
+    <span class="pill pill-{{ status }}">{{ status }}</span>
+    <span class="pill">{{ DAY_TYPE_LABELS[day_type] }}</span>
+  </div>
+</div>
+
+<div class="card">
+  <form method="post" action="{{ url_for('day_type_set') }}" class="inline-form inplace">
+    <input type="hidden" name="date" value="{{ work_date }}">
+    <label>Day type</label>
+    <select name="day_type">
+      {% for t in day_types %}
+        <option value="{{ t }}" {{ 'selected' if t == day_type }}>{{ DAY_TYPE_LABELS[t] }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn" type="submit">Set type</button>
+    <span class="muted small">Marking Holiday/Leave needs an empty day.</span>
+  </form>
+</div>
+
+{% if day_type == 'working' %}
+  {% if status != 'submitted' %}
+  <div class="card">
+    <h2>Add entry</h2>
+    <form method="post" action="{{ url_for('day_add') }}" class="entry-form ctrl-enter inplace" autocomplete="off" id="add-entry-form">
+      <input type="hidden" name="date" value="{{ work_date }}">
+      <div class="form-grid">
+        <div>
+          <label>Task</label>
+          <input type="text" name="task_id" class="combo" data-list="tasks-list" data-numeric-contains placeholder="Type to search…" autocomplete="off" required>
+          <datalist id="tasks-list">
+            {% for t in active_tasks %}
+              <option value="{{ t.task_id }}">{{ t.task_id }} — {{ t.description }}</option>
+            {% endfor %}
+          </datalist>
+        </div>
+        <div>
+          <label>Sub Task</label>
+          <input type="text" name="sub_task" class="combo" data-list="subtasks-list" placeholder="Type to search…" autocomplete="off">
+          <datalist id="subtasks-list">
+            {% for s in active_subtasks %}
+              <option value="{{ s.name }}"></option>
+            {% endfor %}
+          </datalist>
+        </div>
+        <div>
+          <label>Hours</label>
+          <input type="number" name="hours" class="combo" data-list="hours-list" data-arrow-step step="0.25" min="0" placeholder="Type or pick…" autocomplete="off" required>
+          <datalist id="hours-list">
+            {% for h in hours_options %}
+              <option value="{{ h }}"></option>
+            {% endfor %}
+          </datalist>
+        </div>
+        <div>
+          <label>Charge Method</label>
+          <select name="charge_method" required>
+            {% for c in add_charges %}
+              <option value="{{ c.name }}" {{ 'selected' if c.name == default_charge }}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+          {% if charge_note %}<div class="muted small">{{ charge_note }}</div>{% endif %}
+        </div>
+      </div>
+      <div>
+        <label>Description <span class="muted">(≤{{ DESC_MAX }})</span></label>
+        <textarea name="description" maxlength="{{ DESC_MAX }}" rows="2"></textarea>
+      </div>
+      <button class="btn btn-primary" type="submit">Add Hours</button>
+      <span class="muted small">Tip: press Ctrl+Enter to add.</span>
+    </form>
+  </div>
+  {% else %}
+    <div class="flash flash-info">This day is submitted and locked. Unsubmit to edit.</div>
+  {% endif %}
+
+  <div class="card">
+    <div class="row-between">
+      <h2>Entries</h2>
+      <div class="row-gap entries-head-actions">
+        <strong>Total: {{ '%.2f'|format(total) }} h</strong>
+        {% if status == 'submitted' %}
+          <form method="post" action="{{ url_for('day_unsubmit') }}" class="inline inplace">
+            <input type="hidden" name="date" value="{{ work_date }}">
+            <button class="btn" type="submit">Unsubmit</button>
+          </form>
+        {% else %}
+          <form method="post" action="{{ url_for('day_submit') }}" class="inline">
+            <input type="hidden" name="date" value="{{ work_date }}">
+            <button class="btn btn-primary" type="submit">Submit day</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+    <table class="grid master-table">
+      <thead>
+        <tr><th>Task</th><th>Sub Task</th><th>Description</th><th class="num">Hours</th><th>Charge</th><th class="actions-col">Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+          <tr>
+            <td>
+              <form id="erow-{{ e.id }}" method="post" action="{{ url_for('day_entry_update', entry_id=e.id) }}" class="inplace"></form>
+              <span class="view-only">{{ e.task_id }}</span>
+              <select class="edit-only edit-input" form="erow-{{ e.id }}" name="task_id" disabled>
+                {% set ns = namespace(found=false) %}
+                {% for t in active_tasks %}
+                  <option value="{{ t.task_id }}" {% if t.task_id == e.task_id %}selected{% set ns.found = true %}{% endif %}>{{ t.task_id }}</option>
+                {% endfor %}
+                {% if not ns.found and e.task_id %}<option value="{{ e.task_id }}" selected>{{ e.task_id }} (inactive)</option>{% endif %}
+              </select>
+            </td>
+            <td>
+              <span class="view-only">{{ e.sub_task }}</span>
+              <select class="edit-only edit-input" form="erow-{{ e.id }}" name="sub_task" disabled>
+                <option value="">—</option>
+                {% set ns2 = namespace(found=false) %}
+                {% for s in active_subtasks %}
+                  <option value="{{ s.name }}" {% if s.name == e.sub_task %}selected{% set ns2.found = true %}{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+                {% if not ns2.found and e.sub_task %}<option value="{{ e.sub_task }}" selected>{{ e.sub_task }} (inactive)</option>{% endif %}
+              </select>
+            </td>
+            <td>
+              <span class="view-only">{{ e.description }}</span>
+              <input class="edit-only edit-input" form="erow-{{ e.id }}" name="description" maxlength="{{ DESC_MAX }}" value="{{ e.description or '' }}" disabled>
+            </td>
+            <td class="num">
+              <span class="view-only">{{ '%.2f'|format(e.hours) }}</span>
+              <select class="edit-only edit-input" form="erow-{{ e.id }}" name="hours" disabled>
+                {% for h in hours_options %}
+                  <option value="{{ h }}" {{ 'selected' if h == e.hours }}>{{ '%g'|format(h) }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td>
+              <span class="view-only">{{ e.charge_method }}</span>
+              <select class="edit-only edit-input" form="erow-{{ e.id }}" name="charge_method" disabled>
+                {% for c in charges %}
+                  <option value="{{ c.name }}" {{ 'selected' if c.name == e.charge_method }}>{{ c.name }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td class="actions-col">
+              {% if status != 'submitted' %}
+                <button type="button" class="btn btn-sm btn-icon row-edit view-only" title="Edit">{{ ico('edit') }}</button>
+                <button type="submit" form="erow-{{ e.id }}" class="btn btn-sm btn-icon btn-primary edit-only" title="Save">{{ ico('save') }}</button>
+                <button type="button" class="btn btn-sm btn-icon row-cancel edit-only" title="Cancel">{{ ico('cancel') }}</button>
+                <form method="post" action="{{ url_for('day_delete', entry_id=e.id) }}" class="inline view-only inplace"
+                      onsubmit="return confirm('Delete this entry?')">
+                  <button class="btn btn-sm btn-icon btn-trash" type="submit" title="Delete">{{ ico('delete') }}</button>
+                </form>
+              {% else %}
+                <span class="muted small">locked</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="muted">No entries.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="card">
+    <p class="muted">This day is marked <strong>{{ DAY_TYPE_LABELS[day_type] }}</strong>. Set it back to Working to log entries.</p>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  var rules = {{ entry_rules|tojson }};
+  var form = document.getElementById("add-entry-form");
+  if (!form || !rules.length) return;
+  function field(name) { return form.querySelector('[name="' + name + '"]'); }
+  function setIf(name, val) {
+    var el = field(name);
+    if (el && val !== null && val !== undefined && val !== "") el.value = val;
+  }
+  function apply(triggerField, value) {
+    value = (value || "").trim().toLowerCase();
+    if (!value) return;
+    rules.forEach(function (r) {
+      if (r.field === triggerField && (r.value || "").trim().toLowerCase() === value) {
+        setIf("sub_task", r.sub_task);
+        setIf("hours", r.hours);
+        setIf("description", r.description);
+      }
+    });
+  }
+  var taskEl = field("task_id");
+  var subEl = field("sub_task");
+
+  // hide sub-tasks already logged for the entered task on this day
+  var usedCombos = {{ used_combos|tojson }};
+  function updateSubExclusion() {
+    if (!subEl || !subEl.setComboExclude) return;
+    var t = (taskEl ? taskEl.value : "").trim().toLowerCase();
+    var used = [];
+    Object.keys(usedCombos).forEach(function (k) {
+      if (k.trim().toLowerCase() === t) used = usedCombos[k];
+    });
+    subEl.setComboExclude(used);
+  }
+
+  if (taskEl) taskEl.addEventListener("change", function () {
+    apply("task", taskEl.value);
+    updateSubExclusion();
+  });
+  if (subEl) subEl.addEventListener("change", function () { apply("sub_task", subEl.value); });
+  updateSubExclusion();
+})();
+</script>
+{% endblock %}

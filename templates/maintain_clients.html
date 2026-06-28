@@ -1,0 +1,192 @@
+{% extends "layout.html" %}
+{% block title %}Maintain Clients{% endblock %}
+
+{# one row, shared by the Active and De-activated tables #}
+{% macro client_row(c, current_id, tint_min, tint_max) %}
+  <div class="cl-row{% if c.id == current_id %} current{% endif %}" data-id="{{ c.id }}">
+    {# owner form: the name + colour inputs below belong to it via form="clf-…" #}
+    <form id="clf-{{ c.id }}" class="cl-form mgmt" data-id="{{ c.id }}"></form>
+
+    {# caret toggles the colour-scheme panel; the whole row is clickable (see JS),
+       mirroring the Expenses Totals purpose rows #}
+    <span class="cl-caret" aria-hidden="true"></span>
+
+    <span class="swatch" id="sw-{{ c.id }}" style="background: hsl({{ c.hue }} 70% 52%);"></span>
+
+    <span class="cl-name-cell">
+      <span class="cl-name" id="nm-{{ c.id }}">{{ c.name }}</span>
+      <input form="clf-{{ c.id }}" class="cc-name" name="name" value="{{ c.name }}" required hidden>
+      <button type="button" class="btn btn-sm btn-icon cl-name-edit" title="Rename">{{ ico('edit') }}</button>
+      <button type="submit" form="clf-{{ c.id }}" class="btn btn-sm btn-icon btn-primary cl-name-save" title="Save name" hidden>{{ ico('save') }}</button>
+      <button type="button" class="btn btn-sm btn-icon cl-name-cancel" title="Cancel" hidden>{{ ico('cancel') }}</button>
+    </span>
+
+    {% if c.id == current_id %}<span class="cc-badge cc-working">working</span>{% endif %}
+
+    <span class="cl-actions">
+      {% if c.status == 'archived' %}
+      <form method="post" action="{{ url_for('clients_switch') }}" class="mgmt">
+        <input type="hidden" name="client_id" value="{{ c.id }}">
+        <button class="btn btn-sm" type="submit" title="View this client (read-only)">Switch to</button>
+      </form>
+      {% endif %}
+      {% if c.status == 'active' %}
+      <form method="post" action="{{ url_for('clients_delete', client_id=c.id) }}" class="mgmt"
+            onsubmit="return confirm('Deactivate {{ c.name }}? Its data is kept but becomes read-only.');">
+        <button class="btn btn-sm btn-trash" type="submit">Deactivate</button>
+      </form>
+      {% else %}
+      <form method="post" action="{{ url_for('clients_restore', client_id=c.id) }}" class="mgmt">
+        <button class="btn btn-sm" type="submit">Activate</button>
+      </form>
+      {% endif %}
+    </span>
+
+    <!-- colour-scheme adjustments (revealed by the left arrow; AJAX save) -->
+    <div class="cl-detail" id="det-{{ c.id }}" hidden>
+      <div class="cc-row">
+        <label class="cl-lbl">Colour</label>
+        <input type="range" min="0" max="359" name="color_hue" value="{{ c.hue }}" class="cc-hue" form="clf-{{ c.id }}">
+        <span class="muted small cl-note">{{ 'custom' if c.custom else 'auto' }}</span>
+        <button type="button" class="btn btn-sm cl-auto">Auto colour</button>
+      </div>
+      <div class="cc-row">
+        <label class="cl-lbl">Shade · light</label>
+        <input type="range" min="{{ tint_min }}" max="{{ tint_max }}" name="tint_light"
+               value="{{ c.tint_light }}" class="cc-strength cl-sl" form="clf-{{ c.id }}">
+        <output class="muted small cl-out-l">{{ c.tint_light }}</output>
+        <label class="cl-lbl">Shade · dark</label>
+        <input type="range" min="{{ tint_min }}" max="{{ tint_max }}" name="tint_dark"
+               value="{{ c.tint_dark }}" class="cc-strength cl-sd" form="clf-{{ c.id }}">
+        <output class="muted small cl-out-d">{{ c.tint_dark }}</output>
+      </div>
+      <div class="cc-row cl-editor-actions">
+        <button type="submit" form="clf-{{ c.id }}" class="btn btn-sm btn-primary">Save colours</button>
+        <span class="cl-saved muted small" hidden>Saved ✓</span>
+      </div>
+    </div>
+  </div>
+{% endmacro %}
+
+{% block content %}
+<h1>Maintain Clients</h1>
+<p class="muted">Click a <strong>row</strong> to open its colour-scheme
+adjustments, or the <strong>pencil</strong> next to a name to rename it. Both save in place — no page
+reload. <strong>Deactivate</strong> archives a client. To <strong>switch</strong> the client you're
+working with, use the client-name dropdown on the <a href="{{ url_for('home') }}">Home</a> page
+(active clients), or <strong>Switch to</strong> a de-activated client below to view it read-only.</p>
+
+<div class="card add-card">
+  <form method="post" action="{{ url_for('clients_add') }}" class="add-bar inplace mgmt">
+    <div class="add-field grow">
+      <label>New client</label>
+      <input type="text" name="name" placeholder="Client name" required>
+    </div>
+    <button class="btn btn-primary" type="submit">Add client</button>
+  </form>
+</div>
+
+<h2 class="cl-section">Active clients</h2>
+<div class="card cl-list">
+  {% for c in clients if c.status == 'active' %}
+    {{ client_row(c, current_id, tint_min, tint_max) }}
+  {% else %}
+    <div class="muted" style="padding: 12px 14px;">No active clients — add one above.</div>
+  {% endfor %}
+</div>
+
+{% if has_archived %}
+<h2 class="cl-section">De-activated clients</h2>
+<p class="muted small">Archived (read-only). <strong>Switch to</strong> one to view it, or
+<strong>Activate</strong> it to edit again.</p>
+<div class="card cl-list cl-archived">
+  {% for c in clients if c.status == 'archived' %}
+    {{ client_row(c, current_id, tint_min, tint_max) }}
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    document.querySelectorAll(".cl-row").forEach(function (row) {
+      var id = row.getAttribute("data-id");
+      var form = document.getElementById("clf-" + id);
+      var sw = document.getElementById("sw-" + id);
+      var nameText = document.getElementById("nm-" + id);
+      var nameInput = row.querySelector(".cc-name");
+      var editBtn = row.querySelector(".cl-name-edit");
+      var saveBtn = row.querySelector(".cl-name-save");
+      var cancelBtn = row.querySelector(".cl-name-cancel");
+      var detail = row.querySelector(".cl-detail");
+      var note = row.querySelector(".cl-note");
+      var hue = row.querySelector(".cc-hue");
+      var sl = row.querySelector(".cl-sl"), sd = row.querySelector(".cl-sd");
+      var outL = row.querySelector(".cl-out-l"), outD = row.querySelector(".cl-out-d");
+      var saved = row.querySelector(".cl-saved");
+      var auto = row.querySelector(".cl-auto");
+
+      // Click the row to expand / collapse its colour-scheme panel — the same
+      // caret-driven mechanism as the Expenses Totals purpose rows. Clicks on the
+      // row's own buttons/inputs and inside the open panel are ignored so they keep
+      // working (rename, deactivate, the sliders, etc.).
+      row.addEventListener("click", function (e) {
+        if (e.target.closest("button, input, select, a, label, output, .cl-actions, .cl-detail")) return;
+        var open = detail.hidden;
+        detail.hidden = !open;
+        row.classList.toggle("open", open);
+      });
+
+      // pencil makes only the Name editable; cancel reverts, save submits
+      function nameMode(on) {
+        nameText.hidden = on; editBtn.hidden = on;
+        nameInput.hidden = !on; saveBtn.hidden = !on; cancelBtn.hidden = !on;
+        if (on) { nameInput.focus(); nameInput.select(); }
+      }
+      editBtn.addEventListener("click", function () { nameMode(true); });
+      cancelBtn.addEventListener("click", function () {
+        nameInput.value = nameText.textContent; nameMode(false);
+      });
+
+      // live colour preview while dragging the sliders
+      hue.addEventListener("input", function () {
+        sw.style.background = "hsl(" + hue.value + " 70% 52%)";
+        note.textContent = "custom";
+      });
+      sl.addEventListener("input", function () { outL.textContent = sl.value; });
+      sd.addEventListener("input", function () { outD.textContent = sd.value; });
+
+      // both the name save and the colour save submit this one owner form, so
+      // every save sends name + colours together (neither overwrites the other)
+      function save(extra) {
+        var fd = new FormData(form);
+        if (extra) Object.keys(extra).forEach(function (k) { fd.set(k, extra[k]); });
+        fetch("/clients/" + id + "/update", {
+          method: "POST", body: fd, headers: { "X-Requested-With": "fetch" }
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (!data.ok) { alert(data.error || "Save failed."); return; }
+          nameText.textContent = data.name; nameInput.value = data.name;
+          hue.value = data.hue; sw.style.background = "hsl(" + data.hue + " 70% 52%)";
+          note.textContent = data.custom ? "custom" : "auto";
+          sl.value = data.tint_light; outL.textContent = data.tint_light;
+          sd.value = data.tint_dark; outD.textContent = data.tint_dark;
+          // if this is the client currently being worked on, recolour live
+          if (parseInt(id, 10) === {{ current_id if current_id is not none else 'null' }}) {
+            document.body.style.setProperty("--client-hue", data.hue);
+            document.body.style.setProperty("--ct-light", data.tint_light + "%");
+            document.body.style.setProperty("--ct-dark", data.tint_dark + "%");
+          }
+          nameMode(false);
+          if (saved) { saved.hidden = false; setTimeout(function () { saved.hidden = true; }, 1800); }
+        }).catch(function () { alert("Save failed (network)."); });
+      }
+
+      form.addEventListener("submit", function (e) { e.preventDefault(); save(null); });
+      // "Auto colour": ask the server for a fresh hue distinct from the other
+      // clients' colours (it changes on every press), then reflect it in the slider.
+      auto.addEventListener("click", function () { save({ auto: "1" }); });
+    });
+  })();
+</script>
+{% endblock %}

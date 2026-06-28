@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+{% block title %}Report{% endblock %}
+{% block content %}
+<h1>Excel Report</h1>
+
+{% if not have_openpyxl %}
+  <div class="flash flash-error">openpyxl is not installed. Run <code>pip install openpyxl</code>.</div>
+{% endif %}
+
+<div class="card">
+  <form method="get" action="{{ url_for('report_download') }}" class="inline-form">
+    <div>
+      <label>From</label>
+      <input type="date" name="start" value="{{ default_start }}" required>
+    </div>
+    <div>
+      <label>To</label>
+      <input type="date" name="end" value="{{ default_end }}" required>
+    </div>
+    <button class="btn btn-primary" type="submit">Download Report</button>
+  </form>
+</div>
+
+<h2>Rate reference</h2>
+<div class="card">
+  <table class="grid">
+    <thead><tr><th>Charge type</th><th class="num">Percent %</th><th class="num">USD / hr</th></tr></thead>
+    <tbody>
+      {% for c in charges %}
+        <tr>
+          <td>{{ c.name }}{% if c.is_base %} <span class="tag tag-base">base</span>{% endif %}</td>
+          <td class="num">{{ '%.2f'|format(c.percent) }}</td>
+          <td class="num">${{ '%.2f'|format(c.amount_usd) }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

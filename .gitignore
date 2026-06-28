@@ -1,0 +1,20 @@
+# ---- Sensitive: real data + credentials — never publish ----
+timezone.db
+timezone.db-wal
+timezone.db-shm
+backups/
+attachments/
+
+# ---- Machine-local tooling / editor config ----
+.claude/
+
+# ---- Python noise ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.venv/
+venv/
+env/

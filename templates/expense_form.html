@@ -1,0 +1,146 @@
+{% extends "layout.html" %}
+{% block title %}{{ 'Edit' if expense else 'New' }} expense{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if expense else 'New' }} expense</h1>
+
+<div class="card">
+  <form method="post" enctype="multipart/form-data" class="entry-form">
+    <div class="form-grid">
+      <div>
+        <label>Date purchased</label>
+        <input type="date" id="date_purchased" name="date_purchased"
+               value="{{ expense.date_purchased if expense else today }}" required>
+      </div>
+      <div>
+        <label>Item</label>
+        <input type="text" name="item" value="{{ expense.item if expense else '' }}" required>
+      </div>
+      <div>
+        <label>Price</label>
+        <input type="number" name="price" step="0.01" min="0" value="{{ expense.price if expense else '' }}" required>
+      </div>
+      <div>
+        <label>Currency</label>
+        <select name="currency">
+          {% for c in currencies %}
+            <option value="{{ c }}" {{ 'selected' if expense and expense.currency == c }}>{{ c }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Purchased at (vendor)</label>
+        <input type="text" name="purchased_at" value="{{ expense.purchased_at if expense else '' }}">
+      </div>
+      <div>
+        <label>Purpose</label>
+        <select name="purpose">
+          {% for p in purposes %}
+            <option value="{{ p }}" {{ 'selected' if expense and expense.purpose == p }}>{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Category</label>
+        <select name="category">
+          <option value="">— Uncategorized —</option>
+          {% set cur_cat = expense.category if expense else '' %}
+          {% for c in categories %}
+            <option value="{{ c }}" {{ 'selected' if cur_cat == c }}>{{ c }}</option>
+          {% endfor %}
+          {# keep the saved category selectable even if it's now inactive #}
+          {% if cur_cat and cur_cat not in categories %}
+            <option value="{{ cur_cat }}" selected>{{ cur_cat }} (inactive)</option>
+          {% endif %}
+        </select>
+      </div>
+      {# Warranty is hidden entirely for subscriptions (handled in JS) #}
+      <div id="warranty-field">
+        <label>Warranty till</label>
+        <input type="date" id="warranty_till" name="warranty_till"
+               value="{{ expense.warranty_till if expense and expense.warranty_till else '' }}">
+      </div>
+    </div>
+
+    {# ---- Subscription: checkbox with an inline, hide/unhide plan dropdown ---- #}
+    <div class="check sub-check">
+      <input type="checkbox" id="is_subscription" name="is_subscription" value="1"
+             {{ 'checked' if expense and expense.is_subscription }}>
+      <label for="is_subscription">This is a subscription</label>
+
+      <span id="sub-controls" class="sub-controls"
+            {{ '' if (expense and expense.is_subscription) else 'hidden' }}>
+        <label for="subscription_period" class="inline-label">Plan</label>
+        <select id="subscription_period" name="subscription_period">
+          {% for p in subscription_periods %}
+            <option value="{{ p }}"
+              {{ 'selected' if expense and expense.subscription_period == p }}>{{ p }}</option>
+          {% endfor %}
+        </select>
+        <span class="muted small">Renews/ends on
+          <strong id="sub-end-label">{{ expense.subscription_end if expense and expense.subscription_end else '—' }}</strong>
+        </span>
+      </span>
+    </div>
+
+    <div>
+      <label>Attachments (receipts)</label>
+      <input type="file" name="attachments" multiple>
+    </div>
+
+    {% if attachments %}
+      <div class="att-list">
+        <label>Existing files</label>
+        <ul>
+          {% for a in attachments %}
+            <li><a href="{{ url_for('expense_attachment', att_id=a.id) }}" target="_blank">{{ a.original_name }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <div class="row-gap">
+      <button class="btn btn-primary" type="submit">Save</button>
+      <a class="btn" href="{{ url_for('expenses') }}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function () {
+    var cb       = document.getElementById("is_subscription");
+    var controls = document.getElementById("sub-controls");
+    var period   = document.getElementById("subscription_period");
+    var endLbl   = document.getElementById("sub-end-label");
+    var dateIn   = document.getElementById("date_purchased");
+    var warranty = document.getElementById("warranty-field");
+
+    // purchase date + one period, with the day clamped to the target month
+    function endDate(iso, p) {
+      var parts = (iso || "").split("-");
+      if (parts.length !== 3) return "";
+      var y = +parts[0], m = +parts[1], day = +parts[2];
+      if (p === "Yearly") { y += 1; }
+      else { m += 1; if (m > 12) { m = 1; y += 1; } }
+      var last = new Date(y, m, 0).getDate();   // day 0 of next month = last day of m
+      if (day > last) day = last;
+      return y + "-" + String(m).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+    }
+    function refreshEnd() {
+      endLbl.textContent = endDate(dateIn.value, period.value) || "—";
+    }
+    function sync() {
+      // a subscription hides Warranty (not applicable) and shows the plan dropdown
+      controls.hidden = !cb.checked;
+      warranty.hidden = cb.checked;
+      if (cb.checked) refreshEnd();
+    }
+
+    cb.addEventListener("change", sync);
+    period.addEventListener("change", refreshEnd);
+    dateIn.addEventListener("change", function () { if (cb.checked) refreshEnd(); });
+    sync();   // set initial state (covers edit mode)
+  })();
+</script>
+{% endblock %}
