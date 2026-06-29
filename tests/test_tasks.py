@@ -82,6 +82,24 @@ def run(h):
     c.post("/tasks/delete/SMOKE-T2")
     c.post("/subtasks/delete/%d" % sid)
 
+    # ---- "Back" button remembers where the page was opened from (Home / a day) ----
+    h.section("tasks-back-button")
+    day_back = "/day?date=" + h.test_date
+    page = c.get("/tasks", query_string={"back": day_back}).get_data(as_text=True)
+    h.check("Back button points at the day page you came from",
+            ("Back to day " + h.test_date) in page and ('href="%s"' % day_back) in page)
+    # the target survives a plain /tasks load — exactly how the in-place actions return
+    page = c.get("/tasks").get_data(as_text=True)
+    h.check("Back target persists across an in-place reload (no back param)",
+            ("Back to day " + h.test_date) in page)
+    # entering from Home resets it
+    page = c.get("/tasks", query_string={"back": "/"}).get_data(as_text=True)
+    h.check("Back button resets to Home when entered from Home", "Back to Home" in page)
+    # an off-site back target is ignored (no open redirect)
+    page = c.get("/tasks", query_string={"back": "https://evil.example/x"}).get_data(as_text=True)
+    h.check("off-site back target is ignored (falls back to Home)",
+            "Back to Home" in page and "evil.example" not in page)
+
 
 if __name__ == "__main__":
     standalone(run)

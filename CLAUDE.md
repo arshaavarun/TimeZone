@@ -60,6 +60,8 @@ The app is the `timezone/` package; `app.py` and `serve.py` are thin launchers t
 
 Interaction lives in `static/app.js`: forms marked `.inplace` POST via `fetch` then reload with `location.replace` (so Back never replays an action); `data-soft="<selector>"` swaps just that region in place instead of reloading. One-shot `sessionStorage` keys carry state across an in-place reload — `tz_scroll` (scroll position) and `tz_tab_once:<path>` (active tab). Tabbed sections (`.tabset`) therefore open the **first** tab on a fresh visit and only restore the worked tab across an in-place reload.
 
+**Browser Back must act like an app back** (standing rule). The browser Back button must never replay an in-app action or re-enter a detour the user backed out of. Two mechanisms enforce this: in-place actions use `location.replace` (no new history entry), and any in-app "Back / return to X" link must carry the **`data-back`** attribute — the delegated handler in `app.js` makes `a[data-back]` do `history.back()` (falling back to its `href` via `location.replace` when there's no in-app history) so it unwinds instead of pushing a forward entry. Never ship a back-out control as a plain pushing `<a href>`.
+
 ## Project rules (explicit conventions — follow these)
 
 Standing rules for this codebase. Keep this list **living**: when a new durable rule, non-obvious convention, or gotcha emerges, add it here without being asked.

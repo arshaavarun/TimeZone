@@ -1,7 +1,8 @@
 """Maintain Tasks page: Tasks and Sub Tasks routes (scoped to the current client)."""
 from datetime import date, datetime, timedelta
+from urllib.parse import urlparse, parse_qs
 
-from flask import render_template, request, redirect, url_for, flash
+from flask import render_template, request, redirect, url_for, flash, session
 
 from timezone import app
 from timezone.config import *          # noqa: F401,F403
@@ -17,6 +18,21 @@ def tasks():
     (most recent ARCHIVE_LIST_LIMIT, with a 'show all' option)."""
     db = get_db()
     cid = current_client_id(db)
+
+    # "Back" target: remember where the user entered from (Home or a specific day
+    # page) so the page's Back button can return there. Both entry points pass
+    # ?back=<path>; the in-place actions on this page carry no param, so the stored
+    # value survives them. Only same-site paths are honoured (no open redirect).
+    back = request.args.get("back")
+    if back and back.startswith("/") and not back.startswith("//"):
+        session["tasks_back"] = back
+    back_url = session.get("tasks_back") or url_for("home")
+    if back_url.startswith("/day"):                       # /day?date=YYYY-MM-DD
+        d = parse_qs(urlparse(back_url).query).get("date", [""])[0]
+        back_label = ("day " + d) if d else "day"
+    else:
+        back_url, back_label = url_for("home"), "Home"
+
     show_all_inactive = bool(request.args.get("all_inactive"))
     # Completed tasks: a fixed page size (15/30/45/60/90) + a wildcard description
     # search over the whole history. Both come from the query string so a refresh
@@ -74,6 +90,7 @@ def tasks():
 
     return render_template(
         "maintain_tasks.html",
+        back_url=back_url, back_label=back_label,
         active_tasks=active_tasks,
         completed_tasks=completed_tasks, completed_count=completed_count,
         completed_matching=completed_matching, completed_q=completed_q,

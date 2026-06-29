@@ -28,7 +28,7 @@
 <h2>Actions</h2>
 <div class="action-grid">
   <a class="action" href="{{ url_for('entry') }}">{{ ico('calendar', 'action-ico') }}TimeSheet</a>
-  <a class="action" href="{{ url_for('tasks') }}">{{ ico('tasks', 'action-ico') }}Maintain Tasks</a>
+  <a class="action" href="{{ url_for('tasks', back=url_for('home')) }}">{{ ico('tasks', 'action-ico') }}Maintain Tasks</a>
   <a class="action" href="{{ url_for('report') }}">{{ ico('report', 'action-ico') }}Report</a>
   <a class="action" href="{{ url_for('expenses') }}">{{ ico('expenses', 'action-ico') }}Expenses</a>
   <a class="action" href="{{ url_for('invoices') }}">{{ ico('file', 'action-ico') }}Invoice</a>

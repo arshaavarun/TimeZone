@@ -154,6 +154,22 @@
       if (e.persisted) { window.location.reload(); }
     });
 
+    // "App back" links (a[data-back]) behave like the browser's OWN Back button:
+    // they unwind to the page you came from WITHOUT pushing a new forward entry, so
+    // pressing the browser Back afterwards never replays the in-app detour you just
+    // backed out of (e.g. opening Maintain Tasks from a day, adding a task, backing
+    // out — browser Back must not drop you back into Maintain Tasks). Falls back to
+    // the link's href when there is no in-app history (opened directly / fresh tab).
+    document.addEventListener("click", function (e) {
+      var a = e.target.closest && e.target.closest("a[data-back]");
+      if (!a) return;
+      e.preventDefault();
+      var href = a.getAttribute("href");
+      var fromApp = document.referrer && document.referrer.indexOf(location.origin + "/") === 0;
+      if (window.history.length > 1 && fromApp) { window.history.back(); }
+      else { window.location.replace(href || location.href); }
+    });
+
     // Filter forms (year / purpose dropdowns) navigate by REPLACING the current
     // history entry instead of pushing a new one — so changing a filter doesn't
     // pile up Back-button steps; Back returns to the page you came from.

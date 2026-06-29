@@ -78,7 +78,10 @@
 {% endmacro %}
 
 {% block content %}
-<h1>Maintain Tasks</h1>
+<div class="day-header">
+  <a class="btn" href="{{ back_url }}" data-back>← Back to {{ back_label }}</a>
+  <h1 class="inline-title">Maintain Tasks</h1>
+</div>
 
 <div class="tabset">
   <div class="tab-bar">

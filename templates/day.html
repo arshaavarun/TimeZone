@@ -27,7 +27,10 @@
 {% if day_type == 'working' %}
   {% if status != 'submitted' %}
   <div class="card">
-    <h2>Add entry</h2>
+    <div class="row-between">
+      <h2>Add entry</h2>
+      <a class="btn btn-sm" href="{{ url_for('tasks', back=url_for('day', date=work_date)) }}" title="Add or maintain tasks">{{ ico('plus') }} Add Task</a>
+    </div>
     <form method="post" action="{{ url_for('day_add') }}" class="entry-form ctrl-enter inplace" autocomplete="off" id="add-entry-form">
       <input type="hidden" name="date" value="{{ work_date }}">
       <div class="form-grid">
