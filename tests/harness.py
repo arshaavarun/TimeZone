@@ -71,6 +71,20 @@ class Harness:
         self.db = sqlite3.connect(self.tmp.name)
         self.db.row_factory = sqlite3.Row
 
+        # The app now requires owner login. Give the throwaway DB a known password
+        # and mark the shared test client's session authenticated, so every group's
+        # requests sail past the _require_login guard. (test_auth exercises the gate
+        # itself with its own fresh clients.)
+        from werkzeug.security import generate_password_hash
+        self.password = "test-pass-123"
+        self.db.execute(
+            "UPDATE app_settings SET owner_password_hash = ? WHERE id = 1",
+            (generate_password_hash(self.password),),
+        )
+        self.db.commit()
+        with self.client.session_transaction() as s:
+            s["authed"] = True
+
         self.today = date.today().isoformat()
         self.test_date = "2099-01-15"   # far future, isolated from real entries
         self.passed, self.failed = [], []

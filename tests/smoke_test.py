@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tests.harness import Harness, report_and_exit  # noqa: E402
 from tests import (  # noqa: E402
-    test_pages, test_ui, test_tasks, test_charges, test_timesheet,
+    test_pages, test_ui, test_auth, test_tasks, test_charges, test_timesheet,
     test_entry_defaults, test_report, test_expenses, test_subscriptions,
     test_invoices, test_multiclient, test_email, test_autoreload,
 )
@@ -30,6 +30,7 @@ from tests import (  # noqa: E402
 GROUPS = {
     "pages": test_pages.run,
     "ui": test_ui.run,
+    "auth": test_auth.run,
     "tasks": test_tasks.run,
     "charges": test_charges.run,
     "timesheet": test_timesheet.run,

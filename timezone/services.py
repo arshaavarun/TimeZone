@@ -18,6 +18,7 @@ import random
 from datetime import date, datetime
 
 from flask import session
+from werkzeug.security import generate_password_hash, check_password_hash
 
 from timezone.config import *  # noqa: F401,F403
 
@@ -92,6 +93,37 @@ def pick_distinct_hue(existing, min_gap=40, tries=64):
 def app_settings(db):
     """The single global settings row (id = 1): business identity + SMTP server."""
     return db.execute("SELECT * FROM app_settings WHERE id = 1").fetchone()
+
+
+# --------------------------------------------------------------------------
+# Owner login (single shared password, hashed in app_settings)
+# --------------------------------------------------------------------------
+def owner_password_is_set(db):
+    """True once the owner has set a login password (first-run setup done)."""
+    row = app_settings(db)
+    try:
+        return bool(row and (row["owner_password_hash"] or "").strip())
+    except (IndexError, KeyError):
+        return False
+
+
+def set_owner_password(db, raw):
+    """Store a (salted, hashed) owner password. Commits."""
+    db.execute(
+        "UPDATE app_settings SET owner_password_hash = ? WHERE id = 1",
+        (generate_password_hash(raw),),
+    )
+    db.commit()
+
+
+def check_owner_password(db, raw):
+    """Verify a candidate password against the stored hash."""
+    row = app_settings(db)
+    try:
+        h = row["owner_password_hash"] if row else None
+    except (IndexError, KeyError):
+        h = None
+    return bool(h) and check_password_hash(h, raw)
 
 
 def client_profile(db, client_id):

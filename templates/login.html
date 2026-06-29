@@ -1,0 +1,11 @@
+{% extends "auth_base.html" %}
+{% block title %}Log in · TimeZone{% endblock %}
+{% block auth %}
+<p class="auth-sub muted">Enter your password to continue.</p>
+<form method="post" action="{{ url_for('auth_login') }}" class="auth-form">
+  {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+  <label for="pw">Password</label>
+  <input type="password" id="pw" name="password" autocomplete="current-password" autofocus required>
+  <button class="btn btn-primary auth-submit" type="submit">Log in</button>
+</form>
+{% endblock %}

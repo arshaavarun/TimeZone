@@ -4,6 +4,7 @@ timezone.db-wal
 timezone.db-shm
 backups/
 attachments/
+.flask_secret
 
 # ---- Machine-local tooling / editor config ----
 .claude/

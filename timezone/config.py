@@ -16,6 +16,12 @@ DB_PATH = os.environ.get("TIMEZONE_DB") or os.path.join(BASE_DIR, "timezone.db")
 BACKUP_DIR = os.path.join(BASE_DIR, "backups")
 BACKUP_KEEP = 20  # how many startup backups to retain
 
+# Flask session-signing key — generated once and kept in this gitignored file
+# (next to the DB) instead of hard-coded in source. See _load_secret_key in
+# ``timezone/__init__``. Owner-login sessions last this long ("stay logged in").
+SECRET_KEY_FILE = os.path.join(BASE_DIR, ".flask_secret")
+SESSION_DAYS = 30
+
 DEFAULT_CHARGE_TYPES = [
     # (name, is_base, percent, amount_usd)
     ("Regular", 1, 100.0, 29.00),

@@ -1,0 +1,12 @@
+{% extends "auth_base.html" %}
+{% block title %}Set password · TimeZone{% endblock %}
+{% block auth %}
+<p class="auth-sub muted">Welcome. Set a password to protect your data — you'll use it to log in from any device on your network.</p>
+<form method="post" action="{{ url_for('auth_setup') }}" class="auth-form">
+  <label for="pw">New password</label>
+  <input type="password" id="pw" name="password" autocomplete="new-password" autofocus required minlength="6">
+  <label for="pw2">Confirm password</label>
+  <input type="password" id="pw2" name="confirm" autocomplete="new-password" required minlength="6">
+  <button class="btn btn-primary auth-submit" type="submit">Set password and continue</button>
+</form>
+{% endblock %}

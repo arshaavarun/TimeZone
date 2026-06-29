@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}TimeZone{% endblock %}</title>
+  <link rel="stylesheet" href="{{ asset_url('style.css') }}">
+  <script>
+    /* match the rest of the app: apply saved light/dark + control/icon style before paint */
+    (function () {
+      try {
+        var r = document.documentElement;
+        var t = localStorage.getItem("theme"); if (t) r.setAttribute("data-theme", t);
+        var u = localStorage.getItem("uiTheme"); if (u) r.setAttribute("data-ui-theme", u);
+        var i = localStorage.getItem("iconStyle");
+        if (i && ["semantic", "tile", "fc", "solar", "ms"].indexOf(i) < 0) { localStorage.removeItem("iconStyle"); i = null; }
+        if (!i) i = "fc";
+        r.setAttribute("data-icon-style", i);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body class="auth-page">
+  <main class="auth-wrap">
+    <div class="card auth-card">
+      <div class="auth-brand">
+        {% include "_logo.html" %}
+        <span class="brand-word"><span class="wt"><span class="cap">T</span>ime</span><span class="wz"><span class="cap">Z</span>one</span></span>
+      </div>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, msg in messages %}
+          <div class="flash flash-{{ category }}">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block auth %}{% endblock %}
+    </div>
+  </main>
+</body>
+</html>

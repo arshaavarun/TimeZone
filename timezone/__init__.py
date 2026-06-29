@@ -14,9 +14,9 @@ pdfs.py              invoice PDF builder (ReportLab)
 views_*.py           one module per feature area, holding the @app.route handlers
 """
 import os
-from datetime import date
+from datetime import date, timedelta
 
-from flask import Flask, url_for, request, redirect, flash
+from flask import Flask, url_for, request, redirect, flash, session
 
 from timezone import config
 from timezone.database import close_db, init_db, get_db
@@ -27,11 +27,54 @@ app = Flask(
     template_folder=os.path.join(config.BASE_DIR, "templates"),
     static_folder=os.path.join(config.BASE_DIR, "static"),
 )
-app.secret_key = "timesheet-invoicing-local-secret-key-change-me"
+
+
+def _load_secret_key():
+    """Read the Flask session-signing key from a gitignored file, generating and
+    persisting one on first run — so the secret lives next to the data, never in
+    source/version control (the old hard-coded key was forgeable by anyone who
+    saw the repo)."""
+    path = config.SECRET_KEY_FILE
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            key = f.read().strip()
+        if key:
+            return key
+    except OSError:
+        pass
+    key = os.urandom(32).hex()
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(key)
+    except OSError:
+        pass
+    return key
+
+
+app.secret_key = _load_secret_key()
+app.permanent_session_lifetime = timedelta(days=config.SESSION_DAYS)
 app.config["MAX_CONTENT_LENGTH"] = config.MAX_UPLOAD_MB * 1024 * 1024
 
 # close the request DB connection after each request
 app.teardown_appcontext(close_db)
+
+
+# Endpoints reachable WITHOUT a login session (the login/setup/logout pages and
+# static assets). Everything else requires the owner to be logged in.
+_AUTH_EXEMPT = {"auth_login", "auth_setup", "auth_logout", "static"}
+
+
+@app.before_request
+def _require_login():
+    """Single-owner gate: force the first-run password setup, then require login
+    for every page. Registered before the archived-client guard so it runs first."""
+    if request.endpoint in _AUTH_EXEMPT:
+        return
+    db = get_db()
+    if not services.owner_password_is_set(db):
+        return redirect(url_for("auth_setup"))
+    if not session.get("authed"):
+        return redirect(url_for("auth_login", next=request.path))
 
 
 # Management endpoints that must keep working even while an archived (read-only)
@@ -121,5 +164,5 @@ init_db()
 from timezone import (  # noqa: E402,F401
     views_main, views_tasks, views_timesheet, views_reports,
     views_expenses, views_invoices, views_settings,
-    views_clients, views_controls,
+    views_clients, views_controls, views_auth,
 )

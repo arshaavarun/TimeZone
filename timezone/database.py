@@ -326,6 +326,11 @@ def init_db():
     if "completed_at" not in _columns(db, "tasks"):
         cur.execute("ALTER TABLE tasks ADD COLUMN completed_at TEXT")
 
+    # owner login password hash (single-owner auth, added later) — NULL until the
+    # first-run setup screen sets it; see services.owner_password_* and views_auth.
+    if "owner_password_hash" not in _columns(db, "app_settings"):
+        cur.execute("ALTER TABLE app_settings ADD COLUMN owner_password_hash TEXT")
+
     now = datetime.now().isoformat(timespec="seconds")
 
     # global settings row always exists (id = 1)
