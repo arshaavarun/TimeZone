@@ -1,0 +1,7 @@
+# TimeZone dependencies. Install with:  python -m pip install -r requirements.txt
+# (the "Start TimeZone.bat" launcher does this for you on first run)
+flask
+waitress
+hupper
+reportlab
+openpyxl
