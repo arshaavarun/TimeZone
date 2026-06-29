@@ -8,8 +8,10 @@
     <form id="clf-{{ c.id }}" class="cl-form mgmt" data-id="{{ c.id }}"></form>
 
     {# caret toggles the colour-scheme panel; the whole row is clickable (see JS),
-       mirroring the Expenses Totals purpose rows #}
-    <span class="cl-caret" aria-hidden="true"></span>
+       mirroring the Expenses Totals purpose rows. Focusable so keyboard users can
+       toggle it too. #}
+    <span class="cl-caret" role="button" tabindex="0" aria-expanded="false"
+          aria-label="Colour settings for {{ c.name }}"></span>
 
     <span class="swatch" id="sw-{{ c.id }}" style="background: hsl({{ c.hue }} 70% 52%);"></span>
 
@@ -120,6 +122,7 @@ working with, use the client-name dropdown on the <a href="{{ url_for('home') }}
       var saveBtn = row.querySelector(".cl-name-save");
       var cancelBtn = row.querySelector(".cl-name-cancel");
       var detail = row.querySelector(".cl-detail");
+      var caret = row.querySelector(".cl-caret");
       var note = row.querySelector(".cl-note");
       var hue = row.querySelector(".cc-hue");
       var sl = row.querySelector(".cl-sl"), sd = row.querySelector(".cl-sd");
@@ -131,11 +134,19 @@ working with, use the client-name dropdown on the <a href="{{ url_for('home') }}
       // caret-driven mechanism as the Expenses Totals purpose rows. Clicks on the
       // row's own buttons/inputs and inside the open panel are ignored so they keep
       // working (rename, deactivate, the sliders, etc.).
-      row.addEventListener("click", function (e) {
-        if (e.target.closest("button, input, select, a, label, output, .cl-actions, .cl-detail")) return;
+      function toggleDetail() {
         var open = detail.hidden;
         detail.hidden = !open;
         row.classList.toggle("open", open);
+        if (caret) caret.setAttribute("aria-expanded", open ? "true" : "false");
+      }
+      row.addEventListener("click", function (e) {
+        if (e.target.closest("button, input, select, a, label, output, .cl-actions, .cl-detail")) return;
+        toggleDetail();
+      });
+      // keyboard: the focusable caret toggles the panel on Enter / Space
+      if (caret) caret.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); toggleDetail(); }
       });
 
       // pencil makes only the Name editable; cancel reverts, save submits

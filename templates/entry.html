@@ -1,6 +1,7 @@
 {% extends "layout.html" %}
 {% block title %}Timesheet · {{ month_label }}{% endblock %}
 {% block content %}
+{% set cal_state_labels = {'none': 'no hours logged', 'partial': 'partial day', 'complete': 'complete day', 'holiday': 'holiday', 'leave': 'leave'} %}
 <div class="row-between">
   <h1>{{ month_label }}</h1>
   <div class="month-nav">
@@ -25,7 +26,8 @@
               <td class="cal-cell"><span class="cal-link out"><span class="cal-num">{{ cell.day }}</span></span></td>
             {% else %}
               <td class="cal-cell">
-                <a class="cal-link" href="{{ url_for('day', date=cell.date) }}" title="{{ cell.date }}">
+                <a class="cal-link" href="{{ url_for('day', date=cell.date) }}" title="{{ cell.date }}"
+                   aria-label="{{ cell.date }}{% if cal_state_labels.get(cell.state) %}, {{ cal_state_labels[cell.state] }}{% endif %}">
                   <span class="cal-num state-{{ cell.state }}">{{ cell.day }}</span>
                 </a>
               </td>

@@ -112,28 +112,64 @@
         if (at) { try { sessionStorage.setItem("tz_tab_once:" + location.pathname, at.dataset.tab); } catch (x) {} }
       };
 
-      document.querySelectorAll(".tabset").forEach(function (set) {
-        var btns = set.querySelectorAll(".tab-btn");
-        var panels = set.querySelectorAll(".tab-panel");
+      document.querySelectorAll(".tabset").forEach(function (set, si) {
+        var bar = set.querySelector(".tab-bar");
+        var btns = Array.prototype.slice.call(set.querySelectorAll(".tab-btn"));
+        var panels = Array.prototype.slice.call(set.querySelectorAll(".tab-panel"));
+
+        // ARIA tab semantics — wired here so the templates stay plain markup. Each
+        // tab gets role=tab + aria-controls/-selected; each panel role=tabpanel +
+        // aria-labelledby. (Panels have focusable content, so no panel tabindex.)
+        if (bar) bar.setAttribute("role", "tablist");
+        btns.forEach(function (b) {
+          var panel = panels.filter(function (p) { return p.dataset.tab === b.dataset.tab; })[0];
+          b.setAttribute("role", "tab");
+          if (!b.id) b.id = "tz-tab-" + si + "-" + b.dataset.tab;
+          if (panel) {
+            if (!panel.id) panel.id = "tz-tabpanel-" + si + "-" + b.dataset.tab;
+            b.setAttribute("aria-controls", panel.id);
+            panel.setAttribute("role", "tabpanel");
+            panel.setAttribute("aria-labelledby", b.id);
+          }
+        });
+
         function activate(name) {
-          btns.forEach(function (b) { b.classList.toggle("active", b.dataset.tab === name); });
+          btns.forEach(function (b) {
+            var on = b.dataset.tab === name;
+            b.classList.toggle("active", on);
+            b.setAttribute("aria-selected", on ? "true" : "false");
+            b.tabIndex = on ? 0 : -1;          // roving tabindex (ARIA tablist)
+          });
           panels.forEach(function (p) { p.classList.toggle("active", p.dataset.tab === name); });
         }
+        function switchTo(name) {
+          activate(name);
+          var u = new URL(location.href); u.searchParams.set("tab", name);
+          try { history.replaceState(null, "", u.pathname + u.search + u.hash); } catch (x) {}
+        }
         // A manual switch syncs ?tab (so a plain refresh of THIS url keeps the tab)
-        // and starts the new tab at the top. It does NOT push browser history, so Back
-        // still steps to the previous *page*. It deliberately does not persist across
-        // navigation — leaving the page and returning resets to the first tab.
+        // and starts the new tab at the top. It does NOT push browser history, and
+        // does not persist across navigation — leaving and returning resets to tab 1.
         btns.forEach(function (b) {
-          b.addEventListener("click", function () {
-            activate(b.dataset.tab);
-            var u = new URL(location.href); u.searchParams.set("tab", b.dataset.tab);
-            try { history.replaceState(null, "", u.pathname + u.search + u.hash); } catch (x) {}
-            window.scrollTo(0, 0);
-          });
+          b.addEventListener("click", function () { switchTo(b.dataset.tab); window.scrollTo(0, 0); });
+        });
+        // Arrow / Home / End move between tabs (standard tablist keyboard pattern).
+        if (bar) bar.addEventListener("keydown", function (e) {
+          var i = btns.indexOf(document.activeElement);
+          if (i === -1) return;
+          var j = null;
+          if (e.key === "ArrowRight" || e.key === "ArrowDown") j = (i + 1) % btns.length;
+          else if (e.key === "ArrowLeft" || e.key === "ArrowUp") j = (i - 1 + btns.length) % btns.length;
+          else if (e.key === "Home") j = 0;
+          else if (e.key === "End") j = btns.length - 1;
+          if (j === null) return;
+          e.preventDefault();
+          switchTo(btns[j].dataset.tab);
+          btns[j].focus();
         });
         // restore the tab on load: an explicit ?tab wins, else a one-shot stash left
         // by an in-place reload, else the FIRST tab (the default on a fresh visit).
-        var names = Array.prototype.map.call(btns, function (b) { return b.dataset.tab; });
+        var names = btns.map(function (b) { return b.dataset.tab; });
         var initial = new URLSearchParams(location.search).get("tab");
         if (names.indexOf(initial) === -1) {
           try {
@@ -144,6 +180,32 @@
         }
         if (names.indexOf(initial) === -1) initial = names[0];
         if (initial) activate(initial);
+      });
+    })();
+
+    // Calendar (timesheet month grid): arrow keys move day-to-day like a date
+    // picker — Left/Right by a day, Up/Down by a week (same weekday), Home/End to
+    // the first/last day of the month. Out-of-month cells are spans (not links), so
+    // only the real day links (a.cal-link) are in the sequence. Tab still steps
+    // through them one by one as well; this just makes arrow movement work too.
+    (function () {
+      var table = document.querySelector("table.calendar");
+      if (!table) return;
+      var links = Array.prototype.slice.call(table.querySelectorAll("a.cal-link"));
+      if (!links.length) return;
+      table.addEventListener("keydown", function (e) {
+        var i = links.indexOf(document.activeElement);
+        if (i === -1) return;
+        var j;
+        if (e.key === "ArrowRight") j = i + 1;
+        else if (e.key === "ArrowLeft") j = i - 1;
+        else if (e.key === "ArrowDown") j = i + 7;
+        else if (e.key === "ArrowUp") j = i - 7;
+        else if (e.key === "Home") j = 0;
+        else if (e.key === "End") j = links.length - 1;
+        else return;
+        e.preventDefault();
+        links[Math.max(0, Math.min(links.length - 1, j))].focus();
       });
     })();
 
@@ -204,9 +266,18 @@
       document.querySelectorAll("tr.purpose-row").forEach(function (row) {
         var detail = row.nextElementSibling;
         if (!detail || !detail.classList.contains("purpose-detail")) return;
-        row.addEventListener("click", function () {
+        // expose it as a keyboard-operable disclosure (focusable, Enter/Space)
+        row.setAttribute("role", "button");
+        row.setAttribute("tabindex", "0");
+        row.setAttribute("aria-expanded", "false");
+        function toggle() {
           detail.hidden = !detail.hidden;
           row.classList.toggle("open", !detail.hidden);
+          row.setAttribute("aria-expanded", detail.hidden ? "false" : "true");
+        }
+        row.addEventListener("click", toggle);
+        row.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") { e.preventDefault(); toggle(); }
         });
       });
     })();
@@ -227,6 +298,8 @@
       if (!c) {
         c = document.createElement("div");
         c.className = "toasts"; c.id = "toasts";
+        c.setAttribute("role", "status");
+        c.setAttribute("aria-live", "polite");
         document.body.appendChild(c);
       }
       var tmp = document.createElement("div");
@@ -484,6 +557,36 @@
       });
     })();
 
+    // Keyboard navigation for the custom top-bar dropdown menus (they already carry
+    // role=menu/menuitem): Down/Up move between items, Home/End jump to the ends,
+    // Escape closes and returns focus to the button. Down/Up on the trigger opens
+    // the menu and lands on the first/last item.
+    function setupMenuKeys(o) {
+      function items() {
+        return Array.prototype.slice.call(o.menu.querySelectorAll(o.itemSel))
+          .filter(function (el) { return el.offsetParent !== null; });   // visible items only
+      }
+      function focusAt(i) {
+        var its = items();
+        if (its.length) its[(i + its.length) % its.length].focus();
+      }
+      o.trigger.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          if (o.isOpen && !o.isOpen()) o.open();
+          focusAt(e.key === "ArrowUp" ? -1 : 0);
+        }
+      });
+      o.menu.addEventListener("keydown", function (e) {
+        var its = items(), i = its.indexOf(document.activeElement);
+        if (e.key === "ArrowDown") { e.preventDefault(); focusAt(i + 1); }
+        else if (e.key === "ArrowUp") { e.preventDefault(); focusAt(i - 1); }
+        else if (e.key === "Home") { e.preventDefault(); focusAt(0); }
+        else if (e.key === "End") { e.preventDefault(); focusAt(its.length - 1); }
+        else if (e.key === "Escape") { e.preventDefault(); o.close(); o.trigger.focus(); }
+      });
+    }
+
     // Top-bar clock menu: Switch Client / TZ Controls dropdown.
     (function () {
       var menu = document.getElementById("tz-menu");
@@ -502,6 +605,8 @@
       document.addEventListener("keydown", function (e) {
         if (e.key === "Escape" && !dd.hidden) { close(); btn.focus(); }
       });
+      setupMenuKeys({ trigger: btn, menu: dd, itemSel: ".tz-controls-link",
+                      isOpen: function () { return !dd.hidden; }, open: open, close: close });
     })();
 
     // Home only: the client-name heading is a dropdown of active clients. Picking
@@ -526,6 +631,8 @@
       menu.addEventListener("click", function (e) { e.stopPropagation(); });
       document.addEventListener("click", function () { if (!menu.hidden) close(); });
       document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !menu.hidden) close(); });
+      setupMenuKeys({ trigger: btn, menu: menu, itemSel: ".csm-item",
+                      isOpen: function () { return !menu.hidden; }, open: open, close: close });
 
       // Play the entrance once, on the freshly loaded page after a switch: a wave
       // RING sweeps out from the switcher in the NEW client's colour while the page

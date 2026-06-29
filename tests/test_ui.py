@@ -174,6 +174,38 @@ def run(h):
     h.check("body carries the current client's tint (hue + tinted class)",
             "--client-hue:" in home and "tinted" in home)
 
+    # ---- accessibility ----
+    h.section("ui/accessibility")
+    h.check("keyboard focus ring defined (:focus-visible) and overrides select outline",
+            ":focus-visible" in css and "outline: 2px solid var(--primary)" in css)
+    h.check("tabs get ARIA tablist/tab/tabpanel roles + roving tabindex via app.js",
+            'setAttribute("role", "tablist")' in js and 'setAttribute("role", "tab")' in js
+            and 'setAttribute("role", "tabpanel")' in js and "b.tabIndex = on ? 0 : -1" in js)
+    h.check("tabs support arrow-key navigation",
+            'e.key === "ArrowRight"' in js and 'e.key === "Home"' in js)
+    h.check("expenses purpose-rows are keyboard-operable disclosures",
+            'row.setAttribute("role", "button")' in js and 'aria-expanded' in js)
+    h.check("calendar grid supports arrow-key day navigation",
+            'querySelectorAll("a.cal-link")' in js and "j = i + 7" in js and "j = i - 7" in js)
+    h.check("custom dropdown menus support arrow-key navigation",
+            "function setupMenuKeys" in js
+            and 'itemSel: ".tz-controls-link"' in js and 'itemSel: ".csm-item"' in js)
+    h.check("toasts container announces to screen readers (aria-live)",
+            'aria-live="polite"' in home or 'aria-live="polite"' in c.get("/").get_data(as_text=True))
+    # toasts container carries the live region on a flashed page
+    c.post("/tasks/add", data={"task_id": "UIA11Y", "description": "x", "next": "/tasks"})
+    flashed = c.get("/tasks").get_data(as_text=True)
+    h.check("flash toasts render inside an aria-live region",
+            'id="toasts" role="status" aria-live="polite"' in flashed)
+    c.post("/tasks/delete/UIA11Y")
+    entry = c.get("/entry").get_data(as_text=True)
+    h.check("calendar days carry a screen-reader label with their state",
+            'aria-label=' in entry and ("partial day" in entry or "complete day" in entry
+                                        or "no hours logged" in entry))
+    clients_pg = c.get("/clients").get_data(as_text=True)
+    h.check("Maintain Clients caret is a focusable, labelled toggle",
+            'class="cl-caret" role="button" tabindex="0"' in clients_pg and "aria-expanded" in clients_pg)
+
 
 if __name__ == "__main__":
     standalone(run)

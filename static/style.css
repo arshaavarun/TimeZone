@@ -1234,3 +1234,16 @@ body.tinted::before {
 .icon-style-preview .solar-ico, .icon-style-preview .ms-ico { display: block; width: 30px; height: 30px; }
 .prev-tile { width: 32px; height: 32px; padding: 6px; border-radius: 9px; box-sizing: border-box; color: #fff; }
 .theme-opt-check .ico { color: inherit; }
+
+/* ---------- Accessibility: visible keyboard focus ----------
+   A clear focus ring for keyboard users (:focus-visible excludes mouse clicks, so
+   mouse users never see it). Placed last so it overrides the select rule's
+   `outline: none`. The 2px offset puts the ring on the page background, so it stays
+   visible even around same-coloured (e.g. primary) buttons. */
+a:focus-visible, button:focus-visible, [role="button"]:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+.tab-btn:focus-visible, .cl-caret:focus-visible, .csm-item:focus-visible,
+.cal-link:focus-visible, .tz-controls-link:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
