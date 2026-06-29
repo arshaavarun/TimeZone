@@ -17,7 +17,7 @@ pythonw serve.py         # headless — waitress + hupper auto-reload, no consol
 
 `serve.py` is the production/always-on path: in normal use it is already running as a background **Windows Task Scheduler job named "TimeZone"** (set up by `install_autostart.py`; managed via `service_start.bat` / `service_stop.bat` / `service_restart.bat`). **hupper auto-reloads on any `.py` or template save**, so code/template edits go live without a restart — do not tell the user to restart the server for those. Static CSS/JS changes need only a browser refresh (cache-busted via `asset_url`). Set `TIMEZONE_RELOAD=0` to disable auto-reload; `TIMEZONE_PORT` overrides the port.
 
-Both launchers take a timestamped DB backup into `backups/` on start (keeps the latest 20).
+Both launchers take a timestamped DB backup into `backups/` on start, and also auto-back-up every few hours while running (`BACKUP_INTERVAL_HOURS`, default 8 → ~3×/day, via a daemon thread started in the server worker). Backups are full consistent snapshots (SQLite online-backup API), optionally mirrored into a user-chosen cloud-synced folder (TZ Controls → Backup), and ones older than `BACKUP_MAX_AGE_DAYS` (default 10) are auto-deleted from both folders (only `timezone_*.db` files). The backups dir is overridable via `TIMEZONE_BACKUP_DIR` (tests set it so they never touch the real `backups/`).
 
 `Start TimeZone.bat` is the double-click launcher (installs `requirements.txt` on first run, then starts `app.py`) — the non-technical setup path is documented step-by-step in `README.md`.
 

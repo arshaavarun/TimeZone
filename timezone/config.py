@@ -13,8 +13,16 @@ BASE_DIR = os.path.dirname(PACKAGE_DIR)                     # project root
 # DB location can be overridden via the TIMEZONE_DB env var (used by tests so
 # the real timezone.db is never touched). Defaults next to the project.
 DB_PATH = os.environ.get("TIMEZONE_DB") or os.path.join(BASE_DIR, "timezone.db")
-BACKUP_DIR = os.path.join(BASE_DIR, "backups")
-BACKUP_KEEP = 20  # how many startup backups to retain
+# Backups folder is overridable (TIMEZONE_BACKUP_DIR) so the test harness never
+# writes into / prunes the real backups/; defaults next to the project.
+BACKUP_DIR = os.environ.get("TIMEZONE_BACKUP_DIR") or os.path.join(BASE_DIR, "backups")
+# Auto-delete backups older than this many days — in the local backups/ folder AND
+# in any configured cloud-mirror folder. Only files matching the backup name
+# pattern (timezone_*.db) are ever removed; nothing else is touched.
+BACKUP_MAX_AGE_DAYS = 10
+# Take an automatic backup this often *while the server runs* (in addition to the
+# one on startup) so data is captured several times a day even without a restart.
+BACKUP_INTERVAL_HOURS = 8  # 3 per day
 
 # Flask session-signing key — generated once and kept in this gitignored file
 # (next to the DB) instead of hard-coded in source. See _load_secret_key in

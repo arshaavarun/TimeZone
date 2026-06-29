@@ -82,6 +82,7 @@ def _require_login():
 _ARCHIVE_EXEMPT = {
     "clients_switch", "clients_add", "clients_delete", "clients_restore",
     "clients_update", "controls_save", "controls_backup",
+    "controls_backup_folder", "controls_backup_restore",
 }
 
 

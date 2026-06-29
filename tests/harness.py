@@ -62,10 +62,13 @@ class Harness:
         else:
             self.source = "fresh DB (no timezone.db present)"
         os.environ["TIMEZONE_DB"] = self.tmp.name
+        # isolate backups too: tests must never write into / prune the real backups/
+        self.backup_dir = tempfile.mkdtemp(prefix="tz_test_backups_")
+        os.environ["TIMEZONE_BACKUP_DIR"] = self.backup_dir
 
         if PROJECT not in sys.path:
             sys.path.insert(0, PROJECT)
-        import app as application  # imported AFTER the env var so it uses the copy
+        import app as application  # imported AFTER the env vars so it uses the copy
         self.app = application.app
         self.client = self.app.test_client()
         self.db = sqlite3.connect(self.tmp.name)
@@ -116,6 +119,7 @@ class Harness:
             os.remove(self.tmp.name)
         except OSError:
             pass
+        shutil.rmtree(self.backup_dir, ignore_errors=True)
 
 
 def report_and_exit(h):

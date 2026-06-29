@@ -20,8 +20,8 @@ Run:  python app.py                                   -> serves on 0.0.0.0:5000
 import socket
 
 from timezone import app                  # the configured Flask app (routes attached on import)
-from timezone.config import DB_PATH
-from timezone.database import backup_db
+from timezone.config import DB_PATH, BACKUP_INTERVAL_HOURS
+from timezone.database import backup_db, start_periodic_backups
 
 
 def lan_ip():
@@ -39,6 +39,7 @@ def lan_ip():
 
 if __name__ == "__main__":
     saved = backup_db()
+    start_periodic_backups(BACKUP_INTERVAL_HOURS * 3600)   # also back up a few times a day
     ip = lan_ip()
     print("=" * 60)
     print("TimeZone — Timesheet & Invoicing App")

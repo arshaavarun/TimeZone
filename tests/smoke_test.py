@@ -22,7 +22,7 @@ from tests.harness import Harness, report_and_exit  # noqa: E402
 from tests import (  # noqa: E402
     test_pages, test_ui, test_auth, test_tasks, test_charges, test_timesheet,
     test_entry_defaults, test_report, test_expenses, test_subscriptions,
-    test_invoices, test_multiclient, test_email, test_autoreload,
+    test_invoices, test_multiclient, test_backup, test_email, test_autoreload,
 )
 
 # Ordered functional groups -> their run(h) functions. Order matters: feature
@@ -40,6 +40,7 @@ GROUPS = {
     "subscriptions": test_subscriptions.run,
     "invoices": test_invoices.run,
     "multiclient": test_multiclient.run,
+    "backup": test_backup.run,
     "email": test_email.run,          # opt-in (rarely changes; --email / TIMEZONE_TEST_EMAIL=1)
     "autoreload": test_autoreload.run,
 }

@@ -21,7 +21,9 @@ first client (``FIRST_CLIENT_NAME``) and splitting the old ``invoice_profile``
 row into the global ``app_settings`` and the per-client ``client_profile``.
 """
 import os
+import shutil
 import sqlite3
+import threading
 from datetime import datetime
 
 from flask import g
@@ -289,6 +291,10 @@ def init_db():
     os.makedirs(ATTACH_DIR, exist_ok=True)
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
+    # Write-ahead logging: better read/write concurrency so the always-on service
+    # and a manual `python app.py` don't collide on "database is locked". Persists
+    # on the file (set once). Requires a LOCAL disk — never a cloud-sync folder.
+    db.execute("PRAGMA journal_mode=WAL")
     cur = db.cursor()
 
     # A legacy single-client database still has the old ``invoice_profile`` table;
@@ -330,6 +336,11 @@ def init_db():
     # first-run setup screen sets it; see services.owner_password_* and views_auth.
     if "owner_password_hash" not in _columns(db, "app_settings"):
         cur.execute("ALTER TABLE app_settings ADD COLUMN owner_password_hash TEXT")
+
+    # optional extra folder to also copy each backup into (e.g. a cloud-synced
+    # folder for an off-machine copy); NULL = local backups only. See backup_db.
+    if "backup_copy_dir" not in _columns(db, "app_settings"):
+        cur.execute("ALTER TABLE app_settings ADD COLUMN backup_copy_dir TEXT")
 
     now = datetime.now().isoformat(timespec="seconds")
 
@@ -527,28 +538,118 @@ def seed_client_defaults(db, client_id):
     db.commit()
 
 
+def snapshot_db(dest):
+    """Write a consistent, single-file copy of the live DB to ``dest`` via SQLite's
+    online-backup API. Unlike a plain file copy this captures un-checkpointed WAL
+    writes too, so the result is always self-contained and openable on its own."""
+    src = sqlite3.connect(DB_PATH)
+    dst = sqlite3.connect(dest)
+    try:
+        with dst:
+            src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+
+
+def _backup_copy_dir():
+    """The optional extra folder to mirror backups into (``app_settings``), or None
+    when unset / the column doesn't exist yet."""
+    try:
+        con = sqlite3.connect(DB_PATH)
+        row = con.execute("SELECT backup_copy_dir FROM app_settings WHERE id = 1").fetchone()
+        con.close()
+        d = ((row[0] if row else None) or "").strip()
+        return d or None
+    except sqlite3.Error:
+        return None
+
+
+def _backup_age_days(name):
+    """Age in days from a backup filename's timestamp (timezone_YYYYMMDD_HHMMSS.db),
+    or None if the name doesn't parse — robust to sync tools rewriting file mtimes."""
+    try:
+        stamp = name[len("timezone_"):-len(".db")]
+        return (datetime.now() - datetime.strptime(stamp, "%Y%m%d_%H%M%S")).total_seconds() / 86400.0
+    except (ValueError, IndexError):
+        return None
+
+
+def _prune_old_backups(folder):
+    """Delete app-created backups (timezone_*.db) older than BACKUP_MAX_AGE_DAYS in
+    ``folder``. Only the backup-named files are removed — anything else the user
+    keeps in that folder is left untouched."""
+    if not BACKUP_MAX_AGE_DAYS or not os.path.isdir(folder):
+        return
+    for name in os.listdir(folder):
+        if not (name.startswith("timezone_") and name.endswith(".db")):
+            continue
+        age = _backup_age_days(name)
+        if age is not None and age > BACKUP_MAX_AGE_DAYS:
+            try:
+                os.remove(os.path.join(folder, name))
+            except OSError:
+                pass
+
+
 def backup_db():
-    """Copy the existing DB into backups/ with a timestamp; keep the most recent
-    BACKUP_KEEP copies. A safety net so data is never silently lost — the app
-    itself never deletes timezone.db."""
+    """Snapshot the DB into backups/ with a timestamp (consistent + WAL-safe via the
+    online-backup API). If an extra backup folder is configured (e.g. a cloud-synced
+    folder), mirror the new backup there too — best-effort, never raising. Backups
+    older than BACKUP_MAX_AGE_DAYS are then auto-deleted from BOTH folders (only the
+    timezone_*.db files). The app never deletes the live timezone.db."""
     if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
         return None
     os.makedirs(BACKUP_DIR, exist_ok=True)
-    import shutil
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     dest = os.path.join(BACKUP_DIR, "timezone_%s.db" % stamp)
     try:
-        shutil.copy2(DB_PATH, dest)
-    except OSError:
+        snapshot_db(dest)
+    except (sqlite3.Error, OSError):
         return None
-    # prune old backups
-    backups = sorted(
-        f for f in os.listdir(BACKUP_DIR)
-        if f.startswith("timezone_") and f.endswith(".db")
-    )
-    for old in backups[:-BACKUP_KEEP]:
+    _prune_old_backups(BACKUP_DIR)
+    # mirror into the optional extra (cloud-synced) folder, then prune it too
+    extra = _backup_copy_dir()
+    if extra and os.path.isdir(extra):
         try:
-            os.remove(os.path.join(BACKUP_DIR, old))
+            shutil.copy2(dest, os.path.join(extra, os.path.basename(dest)))
         except OSError:
             pass
+        _prune_old_backups(extra)
     return dest
+
+
+# --- periodic backups: a daemon thread that backs up every N hours while the
+# server runs, on top of the once-on-startup backup, so data is captured several
+# times a day even when the machine isn't restarted. ---
+_backup_stop = threading.Event()
+_backup_thread = None
+
+
+def start_periodic_backups(interval_seconds):
+    """Start the periodic-backup daemon thread. Idempotent per process; a
+    non-positive interval is a no-op. Returns the thread (or None)."""
+    global _backup_thread
+    if interval_seconds <= 0:
+        return None
+    if _backup_thread is not None and _backup_thread.is_alive():
+        return _backup_thread
+    _backup_stop.clear()
+
+    def _loop():
+        # Event.wait returns True only when stop is signalled, False on each
+        # timeout — so a backup runs once per interval until stopped.
+        while not _backup_stop.wait(interval_seconds):
+            try:
+                backup_db()
+            except Exception:   # noqa: BLE001 — a backup hiccup must not kill the loop
+                pass
+
+    _backup_thread = threading.Thread(target=_loop, daemon=True, name="tz-periodic-backup")
+    _backup_thread.start()
+    return _backup_thread
+
+
+def stop_periodic_backups():
+    """Signal the periodic-backup thread to stop (used by tests)."""
+    _backup_stop.set()

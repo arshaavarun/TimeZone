@@ -30,7 +30,7 @@ if os.name == "nt" and os.path.exists(_pythonw):
 
 from timezone import app                 # configured Flask app (routes attached on import)
 from timezone import config
-from timezone.database import backup_db
+from timezone.database import backup_db, start_periodic_backups
 
 HOST = "0.0.0.0"
 PORT = int(os.environ.get("TIMEZONE_PORT", "5000"))   # override for tests
@@ -48,6 +48,9 @@ def _template_files():
 
 
 def _run_server():
+    # runs in the reload worker (and the no-reload process) — start the intra-day
+    # periodic backups here so exactly one thread runs per live server process.
+    start_periodic_backups(config.BACKUP_INTERVAL_HOURS * 3600)
     try:
         from waitress import serve
         serve(app, host=HOST, port=PORT)

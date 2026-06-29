@@ -98,9 +98,43 @@ and message templates live on each client's <a href="{{ url_for('settings') }}">
     <div class="card">
       <h3>Backup</h3>
       <p class="muted">Make an immediate timestamped copy of the database into the <code>backups/</code> folder.
-      (A backup is also taken automatically each time the app starts.)</p>
-      <form method="post" action="{{ url_for('controls_backup') }}" class="inplace mgmt">
-        <button class="btn" type="submit">{{ ico('save') }} Back up now</button>
+      Backups are also taken automatically on start-up and every few hours while running; copies older than
+      <strong>10 days</strong> are removed automatically (here and in the cloud folder below).
+      {% if latest_backup %}<br>Latest backup: <code>{{ latest_backup }}</code>.{% endif %}</p>
+      <div class="row-gap">
+        <form method="post" action="{{ url_for('controls_backup') }}" class="inplace mgmt">
+          <button class="btn" type="submit">{{ ico('save') }} Back up now</button>
+        </form>
+        <a class="btn" href="{{ url_for('controls_backup_download') }}">{{ ico('file') }} Download a backup</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Off-machine copy (cloud folder)</h3>
+      <p class="muted">Mirror every backup into another folder — point this at your
+      <strong>OneDrive</strong> or <strong>Google Drive</strong> folder to keep a copy off this PC.
+      <strong>Only backups are copied there; the live database must stay on this computer</strong>
+      — running it from a sync folder corrupts it. Leave blank to turn off.</p>
+      <form method="post" action="{{ url_for('controls_backup_folder') }}" class="inline-form inplace mgmt">
+        <div class="add-field grow">
+          <label>Backup folder</label>
+          <input type="text" name="backup_copy_dir" value="{{ backup_copy_dir }}"
+                 placeholder="C:\Users\you\OneDrive\TimeZone backups">
+        </div>
+        <button class="btn btn-primary" type="submit">Save folder</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Restore from a backup</h3>
+      <p class="muted">Replace <strong>all current data</strong> with a backup <code>.db</code> file you saved
+      earlier. Your current data is backed up first, so this is undoable.</p>
+      <form method="post" action="{{ url_for('controls_backup_restore') }}" enctype="multipart/form-data" class="mgmt"
+            onsubmit="return confirm('Restore from this file? It replaces ALL current data (a backup of the current data is taken first).');">
+        <div><input type="file" name="backup_file" accept=".db" required></div>
+        <label class="check"><input type="checkbox" name="confirm" value="1" required>
+          I understand this replaces all current data.</label>
+        <button class="btn btn-danger" type="submit">{{ ico('reactivate') }} Restore</button>
       </form>
     </div>
   </div>
